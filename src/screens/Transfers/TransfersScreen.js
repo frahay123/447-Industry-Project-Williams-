@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -26,6 +25,12 @@ const NEXT_LABEL = {
   in_transit: 'Mark Delivered',
 };
 
+function formatSiteLabel(raw) {
+  if (raw == null || String(raw).trim() === '') return '';
+  const s = String(raw).trim();
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 function StatusTrack({ status }) {
   const idx = STATUS_ORDER.indexOf(status);
   return (
@@ -47,32 +52,22 @@ function StatusTrack({ status }) {
   );
 }
 
-function LocationChips({ label, selectedKey, onSelectChip, chips }) {
+function SiteChips({ title, selectedValue, onSelect, sites }) {
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>{title}</Text>
       <View style={styles.chipWrap}>
-        {chips.map((c, idx) => {
-          const chipKey = `${c.projectId}-${c.label}-${idx}`;
-          const active = chipKey === selectedKey;
+        {sites.map((c) => {
+          const active = selectedValue === c.value;
           return (
             <Pressable
-              key={`${c.label}-${idx}`}
+              key={c.value}
               style={[styles.chip, active && styles.chipActive]}
-              onPress={() =>
-                onSelectChip(active ? null : { chipKey, projectId: c.projectId })
-              }
+              onPress={() => onSelect(active ? null : c.value)}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {c.label}
               </Text>
-              {c.sub ? (
-                <Text
-                  style={[styles.chipSub, active && styles.chipSubActive]}
-                >
-                  {c.sub}
-                </Text>
-              ) : null}
             </Pressable>
           );
         })}
@@ -88,33 +83,23 @@ export default function TransfersScreen() {
     error,
     canCreate,
     canAdvance,
+    needsProject,
     description,
     setDescription,
     quantity,
     setQuantity,
     notes,
     setNotes,
-    fromProjectId,
-    setFromProjectId,
-    toProjectId,
-    setToProjectId,
-    projects,
-    locationChips,
+    fromLocation,
+    setFromLocation,
+    toLocation,
+    setToLocation,
+    transferSites,
     saveError,
     submitTransfer,
     advanceStatus,
     reload,
   } = useTransfers();
-  const [fromSelectedKey, setFromSelectedKey] = useState(null);
-  const [toSelectedKey, setToSelectedKey] = useState(null);
-
-  useEffect(() => {
-    if (!fromProjectId) setFromSelectedKey(null);
-  }, [fromProjectId]);
-
-  useEffect(() => {
-    if (!toProjectId) setToSelectedKey(null);
-  }, [toProjectId]);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -128,35 +113,28 @@ export default function TransfersScreen() {
           <>
             <Text style={styles.formTitle}>New transfer</Text>
 
-            <LocationChips
-              label="From"
-              selectedKey={fromSelectedKey}
-              onSelectChip={(chip) => {
-                if (!chip) {
-                  setFromSelectedKey(null);
-                  setFromProjectId(null);
-                  return;
-                }
-                setFromSelectedKey(chip.chipKey);
-                setFromProjectId(chip.projectId);
-              }}
-              chips={locationChips}
-            />
+            {needsProject ? (
+              <Text style={styles.msg}>
+                Select a job on the Dashboard first. Transfers are only between
+                Warehouse and Jobsite for that job.
+              </Text>
+            ) : (
+              <>
+                <SiteChips
+                  title="From"
+                  selectedValue={fromLocation}
+                  onSelect={setFromLocation}
+                  sites={transferSites}
+                />
 
-            <LocationChips
-              label="To"
-              selectedKey={toSelectedKey}
-              onSelectChip={(chip) => {
-                if (!chip) {
-                  setToSelectedKey(null);
-                  setToProjectId(null);
-                  return;
-                }
-                setToSelectedKey(chip.chipKey);
-                setToProjectId(chip.projectId);
-              }}
-              chips={locationChips}
-            />
+                <SiteChips
+                  title="To"
+                  selectedValue={toLocation}
+                  onSelect={setToLocation}
+                  sites={transferSites}
+                />
+              </>
+            )}
 
             <Text style={styles.label}>Material</Text>
             <TextInput
@@ -164,6 +142,7 @@ export default function TransfersScreen() {
               value={description}
               onChangeText={setDescription}
               placeholder="Item / material description"
+              editable={!needsProject}
             />
             <Text style={styles.label}>Quantity</Text>
             <TextInput
@@ -171,15 +150,21 @@ export default function TransfersScreen() {
               value={quantity}
               onChangeText={setQuantity}
               keyboardType="number-pad"
+              editable={!needsProject}
             />
             <Text style={styles.label}>Notes (optional)</Text>
             <TextInput
               style={styles.input}
               value={notes}
               onChangeText={setNotes}
+              editable={!needsProject}
             />
             {saveError ? <Text style={styles.msg}>{saveError}</Text> : null}
-            <Pressable style={styles.submit} onPress={submitTransfer}>
+            <Pressable
+              style={[styles.submit, needsProject && { opacity: 0.5 }]}
+              onPress={submitTransfer}
+              disabled={needsProject}
+            >
               <Text style={styles.submitText}>Submit transfer</Text>
             </Pressable>
           </>
@@ -188,12 +173,26 @@ export default function TransfersScreen() {
         <Text style={styles.formTitle}>All transfers</Text>
 
         {!loading && transfers.length === 0 ? (
-          <EmptyState title="No transfers" />
+          <EmptyState
+            title={needsProject ? 'No job selected' : 'No transfers'}
+            body={
+              needsProject
+                ? 'Choose a project on the Dashboard to see transfers for that job.'
+                : undefined
+            }
+          />
         ) : null}
 
         {transfers.map((t) => {
           const nextStatus = NEXT_STATUS[t.status];
           const nextLabel = NEXT_LABEL[t.status];
+
+          const fromDisp = t.source_location
+            ? formatSiteLabel(t.source_location)
+            : (t.source_project_name || '—');
+          const toDisp = t.dest_location
+            ? formatSiteLabel(t.dest_location)
+            : (t.project_name || '—');
 
           return (
             <View key={t.id} style={styles.card}>
@@ -201,11 +200,11 @@ export default function TransfersScreen() {
               <Text style={styles.rowMeta}>Qty {t.quantity}</Text>
               <View style={styles.directionRow}>
                 <Text style={styles.directionFrom}>
-                  {t.source_project_name || '—'}
+                  {fromDisp}
                 </Text>
                 <Text style={styles.directionArrow}> → </Text>
                 <Text style={styles.directionTo}>
-                  {t.project_name || '—'}
+                  {toDisp}
                 </Text>
               </View>
               <Text style={styles.rowMeta}>By {t.requested_by}</Text>
