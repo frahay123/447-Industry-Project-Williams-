@@ -110,6 +110,11 @@ export default function POScreen() {
     extractError,
     extractionNotes,
     pickAndExtractPDF,
+    cancelPo,
+    setBackorderDate,
+    requestAmendQty,
+    requestMarkFinal,
+    isPM,
   } = usePurchaseOrders();
 
   const [previewPoId, setPreviewPoId] = useState(null);
@@ -282,15 +287,34 @@ export default function POScreen() {
             onPress={() => toggleExpand(po.id)}
           >
             <View style={styles.cardHeader}>
-              <Text style={styles.poNumber}>PO #{po.po_number}</Text>
-              {canCreate ? (
-                <Pressable
-                  style={styles.deleteBtn}
-                  onPress={() => confirmDeletePO(po.id)}
-                >
-                  <Text style={styles.deleteBtnText}>Delete</Text>
-                </Pressable>
-              ) : null}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.poNumber}>PO #{po.po_number}</Text>
+                {po.status ? (
+                  <View style={[poS.statusBadge, poS[`status_${po.status}`] || poS.status_open]}>
+                    <Text style={[poS.statusText, poS[`statusText_${po.status}`] || poS.statusText_open]}>
+                      {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {isPM && po.status !== 'cancelled' ? (
+                  <Pressable
+                    style={styles.deleteBtn}
+                    onPress={() => cancelPo(po.id)}
+                  >
+                    <Text style={[styles.deleteBtnText, { color: '#9a3412' }]}>Cancel PO</Text>
+                  </Pressable>
+                ) : null}
+                {canCreate ? (
+                  <Pressable
+                    style={styles.deleteBtn}
+                    onPress={() => confirmDeletePO(po.id)}
+                  >
+                    <Text style={styles.deleteBtnText}>Delete</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
             {po.vendor ? (
               <Text style={styles.vendorText}>{po.vendor}</Text>
@@ -362,15 +386,13 @@ export default function POScreen() {
                   const delivered = it.quantity_delivered || 0;
                   const ordered = it.quantity || 1;
                   const pct = Math.min(100, Math.round((delivered / ordered) * 100));
-                  const isComplete = delivered >= ordered;
+                  const isComplete = delivered >= ordered || it.is_final;
                   return (
                     <View key={it.id} style={styles.itemRow}>
                       <Text style={styles.itemDesc}>{it.description}</Text>
                       <Text style={styles.itemQty}>
                         {it.quantity} {it.unit}
-                        {it.unit_price != null
-                          ? ` · $${Number(it.unit_price).toFixed(2)}`
-                          : ''}
+                        {it.unit_price != null ? ` · $${Number(it.unit_price).toFixed(2)}` : ''}
                       </Text>
                       <View style={delivStyles.progressRow}>
                         <View style={delivStyles.progressBar}>
@@ -380,12 +402,36 @@ export default function POScreen() {
                             isComplete && { backgroundColor: '#16a34a' },
                           ]} />
                         </View>
-                        <Text style={[
-                          delivStyles.progressText,
-                          isComplete && { color: '#16a34a' },
-                        ]}>
+                        <Text style={[delivStyles.progressText, isComplete && { color: '#16a34a' }]}>
                           {delivered}/{ordered} delivered
                         </Text>
+                      </View>
+                      {it.is_final ? (
+                        <Text style={poS.finalLabel}>✓ Final — no more expected</Text>
+                      ) : null}
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                        {it.backorder_date ? (
+                          <Text style={poS.backorderLabel}>
+                            📦 Backorder: {new Date(it.backorder_date).toLocaleDateString()}
+                          </Text>
+                        ) : <View />}
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                          {!isComplete ? (
+                            <Pressable onPress={() => requestMarkFinal(po.id, it.id)}>
+                              <Text style={{ fontSize: 12, color: '#059669', fontWeight: '600' }}>Mark Final</Text>
+                            </Pressable>
+                          ) : null}
+                          <Pressable onPress={() => requestAmendQty(po.id, it.id, it.quantity)}>
+                            <Text style={{ fontSize: 12, color: '#ca8a04', fontWeight: '600' }}>Amend Qty</Text>
+                          </Pressable>
+                          {isPM ? (
+                            <Pressable onPress={() => setBackorderDate(po.id, it.id)}>
+                              <Text style={{ fontSize: 12, color: '#3b82f6', fontWeight: '600' }}>
+                                {it.backorder_date ? 'Edit Date' : '+ Set Backorder Date'}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
                       </View>
                     </View>
                   );
@@ -510,5 +556,37 @@ const delivStyles = StyleSheet.create({
   linkedSlipDate: {
     fontSize: 12,
     color: '#64748b',
+  },
+});
+
+const poS = StyleSheet.create({
+  statusBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  statusText: { fontSize: 12, fontWeight: '700' },
+  status_open: { backgroundColor: '#dbeafe' },
+  statusText_open: { color: '#1d4ed8' },
+  status_partial: { backgroundColor: '#fef3c7' },
+  statusText_partial: { color: '#92400e' },
+  status_fulfilled: { backgroundColor: '#dcfce7' },
+  statusText_fulfilled: { color: '#166534' },
+  status_cancelled: { backgroundColor: '#fee2e2' },
+  statusText_cancelled: { color: '#991b1b' },
+  finalLabel: {
+    fontSize: 12,
+    color: '#16a34a',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  backorderLabel: {
+    fontSize: 12,
+    color: '#9a3412',
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

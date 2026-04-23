@@ -100,6 +100,7 @@ export default function DeliveriesScreen() {
     lineItemError,
     submitLineItems,
     existingItems,
+    poItems,
     getPlacementsForDescription,
     loadSlipItems,
     // PO matching
@@ -112,6 +113,12 @@ export default function DeliveriesScreen() {
     clearPoMatch,
     dismissMatchPrompt,
     showManualPicker,
+    shipmentNumber,
+    setShipmentNumber,
+    expectedShipments,
+    setExpectedShipments,
+    promptRejectSlip,
+    isWarehouse,
   } = useDeliveries();
 
   const [previewId, setPreviewId] = useState(null);
@@ -146,6 +153,28 @@ export default function DeliveriesScreen() {
         {canUpload && !needsProject ? (
           <>
             <Text style={styles.formTitle}>Upload slip</Text>
+            
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>Shipment #</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={shipmentNumber}
+                  onChangeText={setShipmentNumber}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>Expected Total</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={expectedShipments}
+                  onChangeText={setExpectedShipments}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
             {uploadError ? <Text style={styles.msg}>{uploadError}</Text> : null}
             <Pressable
               style={[styles.uploadBtn, uploading && { opacity: 0.6 }]}
@@ -172,12 +201,46 @@ export default function DeliveriesScreen() {
         {matchPromptSlipId != null && matchPromptMode === 'auto' && suggestedMatchPo ? (
           <View style={matchStyles.card}>
             <Text style={matchStyles.title}>PO Match Found</Text>
-            <Text style={matchStyles.body}>
-              This delivery appears to match{' '}
-              <Text style={matchStyles.bold}>PO #{suggestedMatchPo.po_number}</Text>
-              {suggestedMatchPo.vendor ? ` (${suggestedMatchPo.vendor})` : ''}
-              {' — '}{suggestedMatchPo.matchedItemCount} of {suggestedMatchPo.totalSlipItems} items match.
+            <Text style={matchStyles.subtitle}>
+              PO #{suggestedMatchPo.po_number}
+              {suggestedMatchPo.vendor ? `  ·  ${suggestedMatchPo.vendor}` : ''}
             </Text>
+
+            {/* Matched item pairs */}
+            <View style={matchStyles.pairsTable}>
+              <View style={matchStyles.pairsHeader}>
+                <Text style={[matchStyles.pairsCol, matchStyles.pairsHeaderText]}>On Slip</Text>
+                <Text style={[matchStyles.pairsColNarrow, matchStyles.pairsHeaderText]}>Qty</Text>
+                <Text style={[matchStyles.pairsCol, matchStyles.pairsHeaderText]}>On PO</Text>
+                <Text style={[matchStyles.pairsColNarrow, matchStyles.pairsHeaderText]}>Ordered</Text>
+              </View>
+              {(suggestedMatchPo.matchedPairs || []).map((pair, i) => {
+                const qtyMatch = pair.slipQty === pair.poQty;
+                return (
+                  <View key={i} style={[matchStyles.pairsRow, i % 2 === 1 && matchStyles.pairsRowAlt]}>
+                    <Text style={[matchStyles.pairsCol, matchStyles.pairsCell]} numberOfLines={2}>
+                      {pair.slipDescription}
+                    </Text>
+                    <Text style={[matchStyles.pairsColNarrow, matchStyles.pairsCell, !qtyMatch && matchStyles.qtyMismatch]}>
+                      {pair.slipQty ?? '—'}
+                    </Text>
+                    <Text style={[matchStyles.pairsCol, matchStyles.pairsCell]} numberOfLines={2}>
+                      {pair.poDescription}
+                    </Text>
+                    <Text style={[matchStyles.pairsColNarrow, matchStyles.pairsCell]}>
+                      {pair.poQty ?? '—'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {suggestedMatchPo.matchedItemCount < suggestedMatchPo.totalSlipItems ? (
+              <Text style={matchStyles.unmatchedNote}>
+                {suggestedMatchPo.totalSlipItems - suggestedMatchPo.matchedItemCount} slip item(s) had no PO match — they will still be recorded.
+              </Text>
+            ) : null}
+
             <View style={matchStyles.btnRow}>
               <Pressable
                 style={[matchStyles.btn, matchStyles.btnConfirm, matching && { opacity: 0.6 }]}
@@ -316,20 +379,49 @@ export default function DeliveriesScreen() {
                 ) : null}
               </View>
 
-              {/* Linked PO badge */}
-              {s.matched_po_id ? (
-                <View style={matchStyles.linkedBadge}>
-                  <Text style={matchStyles.linkedText}>
-                    Linked to PO #{s.matched_po_number || s.matched_po_id}
-                    {s.matched_po_vendor ? ` (${s.matched_po_vendor})` : ''}
-                  </Text>
-                  <Pressable
-                    onPress={() => clearPoMatch(s.id)}
-                    hitSlop={8}
-                  >
-                    <Text style={matchStyles.unlinkText}>Unlink</Text>
-                  </Pressable>
+              {/* Multi-PO pills */}
+              {Array.isArray(s.linked_pos) && s.linked_pos.length > 0 ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {s.linked_pos.map((po) => (
+                    <View key={po.id} style={matchStyles.linkedBadge}>
+                      <Text style={matchStyles.linkedText}>
+                        PO #{po.po_number}{po.vendor ? ` (${po.vendor})` : ''}
+                      </Text>
+                      <Pressable
+                        onPress={() => clearPoMatch(s.id, po.id)}
+                        hitSlop={8}
+                      >
+                        <Text style={matchStyles.unlinkText}>Unlink</Text>
+                      </Pressable>
+                    </View>
+                  ))}
                 </View>
+              ) : null}
+
+              {/* Shipment badge */}
+              {s.expected_shipments > 1 ? (
+                <View style={slipS.shipmentBadge}>
+                  <Text style={slipS.shipmentText}>
+                    📦 Shipment {s.shipment_number} of {s.expected_shipments}
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Rejected badge */}
+              {s.is_rejected ? (
+                <View style={slipS.rejectedBadge}>
+                  <Text style={slipS.rejectedText}>🚫 Rejected — {s.rejection_reason || 'No reason given'}</Text>
+                </View>
+              ) : null}
+
+              {/* Reject button (Warehouse only, not already rejected) */}
+              {!s.is_rejected && isWarehouse ? (
+                <Pressable
+                  style={[styles.uploadBtn, { backgroundColor: '#fee2e2', marginTop: 10 }]}
+                  onPress={() => promptRejectSlip(s.id)}
+                >
+                  <Text style={[styles.uploadBtnText, { color: '#991b1b' }]}>Request Rejection</Text>
+                </Pressable>
               ) : null}
 
               <Pressable
@@ -413,13 +505,76 @@ export default function DeliveriesScreen() {
                           <Picker
                             selectedValue={locVal}
                             onValueChange={(v) => updateLineItem(i, 'location', v)}
-                            style={Platform.OS === 'ios' ? { width: '100%', height: 150 } : styles.picker}
+                            style={Platform.OS === 'ios' ? { width: '100%', height: 120 } : styles.picker}
                           >
                             {locationOptions.map((opt) => (
                               <Picker.Item key={opt.id} label={opt.label} value={opt.id} />
                             ))}
                           </Picker>
                         </View>
+                      </View>
+
+                      {poItems && poItems.length > 0 ? (
+                        <View style={[styles.itemLocationColumn, { marginTop: 10 }]}>
+                          <Text style={styles.itemLocationLabel}>Matches PO Item</Text>
+                          <View style={[styles.pickerShell, { borderColor: '#3b82f6' }]}>
+                            <Picker
+                              selectedValue={item.po_line_item_id}
+                              onValueChange={(v) => updateLineItem(i, 'po_line_item_id', v)}
+                              style={Platform.OS === 'ios' ? { width: '100%', height: 120 } : styles.picker}
+                            >
+                              <Picker.Item label="None / Manual Item" value={null} />
+                              {poItems.map((p) => (
+                                <Picker.Item 
+                                  key={p.id} 
+                                  label={`${p.description} (Ordered: ${p.quantity})`} 
+                                  value={p.id} 
+                                />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+                      ) : null}
+
+                      {/* Damage Tracking */}
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemLocationLabel}>Damaged Qty</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={item.damage_qty}
+                            onChangeText={(v) => updateLineItem(i, 'damage_qty', v)}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <Text style={styles.itemLocationLabel}>Damage Notes</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={item.damage_notes}
+                            onChangeText={(v) => updateLineItem(i, 'damage_notes', v)}
+                            placeholder="e.g. Scratched, broken"
+                          />
+                        </View>
+                      </View>
+
+                      {/* Wrong Item Toggle */}
+                      <View style={{ marginTop: 12, backgroundColor: item.is_wrong_item ? '#fee2e2' : '#f1f5f9', padding: 8, borderRadius: 8 }}>
+                        <Pressable 
+                          style={{ flexDirection: 'row', alignItems: 'center' }}
+                          onPress={() => updateLineItem(i, 'is_wrong_item', !item.is_wrong_item)}
+                        >
+                          <View style={{ width: 20, height: 20, borderWidth: 1, borderColor: '#94a3b8', marginRight: 8, backgroundColor: item.is_wrong_item ? '#ef4444' : '#fff' }} />
+                          <Text style={{ fontWeight: '600', color: item.is_wrong_item ? '#991b1b' : '#334155' }}>Flag as Wrong Item</Text>
+                        </Pressable>
+                        {item.is_wrong_item ? (
+                          <TextInput
+                            style={[styles.textInput, { marginTop: 8, backgroundColor: '#fff' }]}
+                            value={item.wrong_item_notes}
+                            onChangeText={(v) => updateLineItem(i, 'wrong_item_notes', v)}
+                            placeholder="Notes about wrong item..."
+                          />
+                        ) : null}
                       </View>
                     </View>
                     );
@@ -760,4 +915,97 @@ const matchStyles = StyleSheet.create({
     color: '#dc2626',
     marginLeft: 12,
   },
+  subtitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    marginBottom: 12,
+  },
+  pairsTable: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    marginBottom: 10,
+  },
+  pairsHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#2563eb',
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+  },
+  pairsHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  pairsRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#fff',
+  },
+  pairsRowAlt: {
+    backgroundColor: '#eff6ff',
+  },
+  pairsCol: {
+    flex: 3,
+    paddingRight: 6,
+  },
+  pairsColNarrow: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  pairsCell: {
+    fontSize: 13,
+    color: '#1e293b',
+    lineHeight: 18,
+  },
+  qtyMismatch: {
+    color: '#d97706',
+    fontWeight: '700',
+  },
+  unmatchedNote: {
+    fontSize: 12,
+    color: '#92400e',
+    backgroundColor: '#fef3c7',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 10,
+    lineHeight: 17,
+  },
 });
+
+const slipS = StyleSheet.create({
+  shipmentBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  shipmentText: {
+    fontSize: 12,
+    color: '#1d4ed8',
+    fontWeight: '700',
+  },
+  rejectedBadge: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  rejectedText: {
+    fontSize: 13,
+    color: '#991b1b',
+    fontWeight: '700',
+  },
+});
+

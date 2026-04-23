@@ -83,9 +83,10 @@ export function useDeliveries() {
   const [inventoryByDesc, setInventoryByDesc] = useState({});
 
   const [editingSlipId, setEditingSlipId] = useState(null);
-  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '' }]);
+  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '', po_line_item_id: null }]);
   const [lineItemError, setLineItemError] = useState('');
   const [existingItems, setExistingItems] = useState({});
+  const [poItems, setPoItems] = useState([]);
 
   // Extraction state (suggested items from Bedrock on upload)
   const [suggestedItems, setSuggestedItems] = useState({});
@@ -97,8 +98,13 @@ export function useDeliveries() {
   const [matchPromptMode, setMatchPromptMode] = useState(null); // null | 'auto' | 'manual'
   const [matching, setMatching] = useState(false);
 
+  // Shipment upload parameters
+  const [shipmentNumber, setShipmentNumber] = useState('1');
+  const [expectedShipments, setExpectedShipments] = useState('1');
+
   const canUpload = canUploadPackingSlip(session?.roleId);
   const canAddItems = canAddDeliveryItems(session?.roleId);
+  const isWarehouse = session?.roleId === 4;
 
   const [settings, setSettings] = useState({ warehouse1_name: '', warehouse2_name: '' });
 
@@ -250,13 +256,21 @@ export function useDeliveries() {
     try {
       const items = await apiFetch(`/api/packing-slips/${slipId}/items`, {}, apiSession);
       setExistingItems((prev) => ({ ...prev, [slipId]: Array.isArray(items) ? items : [] }));
+      
+      const slip = slips.find(s => s.id === slipId);
+      if (slip?.matched_po_id) {
+        const poData = await apiFetch(`/api/purchase-orders/${slip.matched_po_id}`, {}, apiSession);
+        setPoItems(poData.items || []);
+      } else {
+        setPoItems([]);
+      }
     } catch { /* ignore */ }
-  }, [apiSession]);
+  }, [apiSession, slips]);
 
   const toggleEditSlip = useCallback((slipId) => {
     if (editingSlipId === slipId) {
       setEditingSlipId(null);
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
       return;
     }
     setEditingSlipId(slipId);
@@ -265,22 +279,42 @@ export function useDeliveries() {
 
     // Pre-fill from suggested items if available and no existing items yet
     const suggestions = suggestedItems[slipId];
+    const suggestionMeta = suggestedMatchPo?.id === slips.find(s => s.id === slipId)?.matched_po_id ? suggestedMatchPo : null;
     const existing = existingItems[slipId];
+    
     if (Array.isArray(suggestions) && suggestions.length > 0 && (!existing || existing.length === 0)) {
       setLineItems(
-        suggestions.map((it) => ({
+        suggestions.map((it) => {
+          // Find matching PO item ID from suggestions if it exists
+          const match = suggestionMeta?.matchedPairs?.find(p => p.slipDescription === it.description);
+          return {
+            description: it.description || '',
+            quantity_received: String(it.quantity_received || 0),
+            location: defaultLocation,
+            po_line_item_id: match?.poLineItemId || null,
+          };
+        }),
+      );
+    } else if (Array.isArray(existing) && existing.length > 0) {
+      setLineItems(
+        existing.map((it) => ({
           description: it.description || '',
           quantity_received: String(it.quantity_received || 0),
-          location: defaultLocation,
-        })),
+          location: defaultLocation, // existing items don't have location saved yet in this mock, but in real DB we might fetch it
+          po_line_item_id: it.po_line_item_id || null,
+          damage_qty: String(it.damage_qty || 0),
+          damage_notes: it.damage_notes || '',
+          is_wrong_item: !!it.is_wrong_item,
+          wrong_item_notes: it.wrong_item_notes || '',
+        }))
       );
     } else {
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
     }
-  }, [editingSlipId, loadSlipItems, defaultLocation, suggestedItems, existingItems]);
+  }, [editingSlipId, loadSlipItems, defaultLocation, suggestedItems, existingItems, suggestedMatchPo, slips]);
 
   const addLineItem = useCallback(() => {
-    setLineItems((prev) => [...prev, { description: '', quantity_received: '0', location: defaultLocation }]);
+    setLineItems((prev) => [...prev, { description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
   }, [defaultLocation]);
 
   const updateLineItem = useCallback((index, field, value) => {
@@ -315,13 +349,18 @@ export function useDeliveries() {
               description: it.description.trim(),
               quantity_received: parseInt(it.quantity_received, 10) || 0,
               location: coerceLoc(it.location),
+              po_line_item_id: it.po_line_item_id,
+              damage_qty: parseInt(it.damage_qty, 10) || 0,
+              damage_notes: it.damage_notes?.trim() || '',
+              is_wrong_item: !!it.is_wrong_item,
+              wrong_item_notes: it.wrong_item_notes?.trim() || '',
             })),
           },
         },
         apiSession,
       );
       await loadSlipItems(editingSlipId);
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
       setEditingSlipId(null);
       setLineItemError('');
       await load();
@@ -345,6 +384,8 @@ export function useDeliveries() {
         const finalUri = manipResult.uri;
         const form = new FormData();
         form.append('projectId', String(selectedProjectId));
+        form.append('shipmentNumber', shipmentNumber);
+        form.append('expectedShipments', expectedShipments);
         form.append('photo', {
           uri: finalUri,
           name: 'slip.jpg',
@@ -388,7 +429,15 @@ export function useDeliveries() {
         await load();
         await refreshProjects();
       } catch (e) {
-        setUploadError(e.message || 'Upload failed.');
+        if (e.status === 409 || e.message?.includes('duplicate')) {
+          Alert.alert(
+            '⚠️ Duplicate File',
+            'This exact file has already been uploaded for this project. Please verify before proceeding.',
+            [{ text: 'OK' }],
+          );
+        } else {
+          setUploadError(e.message || 'Upload failed.');
+        }
       } finally {
         setUploading(false);
       }
@@ -430,12 +479,12 @@ export function useDeliveries() {
     }
   }, [apiSession, load]);
 
-  const clearPoMatch = useCallback(async (slipId) => {
+  const clearPoMatch = useCallback(async (slipId, poId) => {
     if (!apiSession) return;
     try {
       await apiFetch(
         `/api/packing-slips/${slipId}/match`,
-        { method: 'PATCH', body: { poId: null } },
+        { method: 'PATCH', body: { poId, unlink: true } },
         apiSession,
       );
       await load();
@@ -480,6 +529,8 @@ export function useDeliveries() {
       setUploading(true);
       const form = new FormData();
       form.append('projectId', String(selectedProjectId));
+      form.append('shipmentNumber', shipmentNumber);
+      form.append('expectedShipments', expectedShipments);
       form.append('photo', {
         uri: result.assets[0].uri,
         name: result.assets[0].name || 'slip.pdf',
@@ -518,7 +569,15 @@ export function useDeliveries() {
       await load();
       await refreshProjects();
     } catch (e) {
-      setUploadError(e.message || 'PDF upload failed.');
+      if (e.status === 409 || e.message?.includes('duplicate')) {
+        Alert.alert(
+          '⚠️ Duplicate File',
+          'This exact file has already been uploaded for this project. Please verify before proceeding.',
+          [{ text: 'OK' }],
+        );
+      } else {
+        setUploadError(e.message || 'PDF upload failed.');
+      }
     } finally {
       setUploading(false);
     }
@@ -547,6 +606,41 @@ export function useDeliveries() {
     ]);
   }, [apiSession, editingSlipId, defaultLocation, load, loadShortages, loadInventoryLocations, refreshProjects]);
 
+  const promptRejectSlip = useCallback((slipId) => {
+    Alert.prompt(
+      'Request Delivery Rejection',
+      'Please provide a reason for rejecting this delivery. A request will be sent to the PM for approval.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request',
+          style: 'destructive',
+          onPress: async (reason) => {
+            if (!reason?.trim()) {
+              Alert.alert('Error', 'A rejection reason is required.');
+              return;
+            }
+            try {
+              await apiFetch('/api/po-change-requests', {
+                method: 'POST',
+                body: {
+                  projectId: selectedProjectId,
+                  packingSlipId: slipId,
+                  requestType: 'reject_slip',
+                  payload: { reason: reason.trim() },
+                },
+              }, apiSession);
+              Alert.alert('Success', 'Rejection request sent to PM.');
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Failed to submit request.');
+            }
+          },
+        },
+      ],
+      'plain-text'
+    );
+  }, [apiSession, selectedProjectId]);
+
   return {
     slips,
     loading,
@@ -573,6 +667,7 @@ export function useDeliveries() {
     lineItemError,
     submitLineItems,
     existingItems,
+    poItems,
     getPlacementsForDescription,
     loadSlipItems,
     // PO matching
@@ -585,5 +680,11 @@ export function useDeliveries() {
     clearPoMatch,
     dismissMatchPrompt,
     showManualPicker,
+    shipmentNumber,
+    setShipmentNumber,
+    expectedShipments,
+    setExpectedShipments,
+    promptRejectSlip,
+    isWarehouse,
   };
 }

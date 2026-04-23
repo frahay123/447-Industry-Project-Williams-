@@ -36,6 +36,7 @@ export function usePurchaseOrders() {
   const [extractionNotes, setExtractionNotes] = useState('');
 
   const canCreate = canCreatePO(session?.roleId);
+  const isPM = session?.roleId === 2;
 
   const poImageHeaders = useMemo(
     () => ({
@@ -300,6 +301,120 @@ export function usePurchaseOrders() {
     ]);
   }, [apiSession, expandedId, load]);
 
+  const cancelPo = useCallback(async (id) => {
+    Alert.alert('Cancel PO', 'Are you sure you want to cancel this PO? This action cannot be undone.', [
+      { text: 'Keep Open', style: 'cancel' },
+      {
+        text: 'Cancel PO',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiFetch(`/api/purchase-orders/${id}/cancel`, { method: 'PATCH' }, apiSession);
+            await load();
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Could not cancel PO.');
+          }
+        },
+      },
+    ]);
+  }, [apiSession, load]);
+
+  const setBackorderDate = useCallback((poId, liId) => {
+    Alert.prompt(
+      'Set Backorder Date',
+      'Enter expected delivery date (YYYY-MM-DD), or leave blank to clear:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: async (dateStr) => {
+            try {
+              await apiFetch(`/api/purchase-orders/${poId}/line-items/${liId}/backorder`, {
+                method: 'PATCH',
+                body: { backorderDate: dateStr?.trim() || null },
+              }, apiSession);
+              // reload PO detail
+              if (expandedId === poId) {
+                const data = await apiFetch(`/api/purchase-orders/${poId}`, {}, apiSession);
+                setExpandedItems(data.items || []);
+              }
+              await load();
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Could not update backorder date.');
+            }
+          },
+        },
+      ],
+      'plain-text'
+    );
+  }, [apiSession, expandedId, load]);
+
+  const requestAmendQty = useCallback((poId, liId, currentQty) => {
+    Alert.prompt(
+      'Amend Quantity',
+      `Current quantity is ${currentQty}. Enter new requested quantity:`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request',
+          onPress: async (qtyStr) => {
+            const newQty = parseInt(qtyStr, 10);
+            if (!newQty || newQty <= 0) {
+              Alert.alert('Error', 'Invalid quantity.');
+              return;
+            }
+            try {
+              await apiFetch('/api/po-change-requests', {
+                method: 'POST',
+                body: {
+                  projectId: selectedProjectId,
+                  purchaseOrderId: poId,
+                  poLineItemId: liId,
+                  requestType: 'amend_line_qty',
+                  payload: { newQty },
+                },
+              }, apiSession);
+              Alert.alert('Success', 'Amendment request sent to PM.');
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Could not submit request.');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      String(currentQty)
+    );
+  }, [apiSession, selectedProjectId]);
+
+  const requestMarkFinal = useCallback((poId, liId) => {
+    Alert.alert(
+      'Mark as Final',
+      'Request PM to mark this line item as final? (Closes it even if not fully delivered)',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request',
+          onPress: async () => {
+            try {
+              await apiFetch('/api/po-change-requests', {
+                method: 'POST',
+                body: {
+                  projectId: selectedProjectId,
+                  purchaseOrderId: poId,
+                  poLineItemId: liId,
+                  requestType: 'close_line_early',
+                },
+              }, apiSession);
+              Alert.alert('Success', 'Request sent to PM.');
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Could not submit request.');
+            }
+          },
+        },
+      ]
+    );
+  }, [apiSession, selectedProjectId]);
+
   return {
     pos,
     loading,
@@ -337,5 +452,10 @@ export function usePurchaseOrders() {
     extractError,
     extractionNotes,
     pickAndExtractPDF,
+    cancelPo,
+    setBackorderDate,
+    requestAmendQty,
+    requestMarkFinal,
+    isPM,
   };
 }
