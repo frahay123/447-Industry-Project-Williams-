@@ -50,23 +50,24 @@ export const styles = StyleSheet.create({
     color: '#0f172a',
     flex: 1,
   },
-  lineItemRow: {
+  lineItemContainer: {
+    marginBottom: 12,
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  lineItemTopRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-end',
-    marginBottom: 8,
+    alignItems: 'center',
   },
-  lineItemDesc: {
-    flex: 3,
-  },
-  lineItemQty: {
-    flex: 1,
-  },
-  lineItemUnit: {
-    flex: 1,
-  },
-  lineItemPrice: {
-    flex: 1,
+  lineItemBottomRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
   },
   removeItemBtn: {
     paddingVertical: 10,

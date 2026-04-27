@@ -35,6 +35,11 @@ export function usePurchaseOrders() {
   const [extractError, setExtractError] = useState('');
   const [extractionNotes, setExtractionNotes] = useState('');
 
+  // Manual slip linking state
+  const [matchPromptPoId, setMatchPromptPoId] = useState(null);
+  const [availableSlips, setAvailableSlips] = useState([]);
+  const [matching, setMatching] = useState(false);
+
   const canCreate = canCreatePO(session?.roleId);
   const isPM = session?.roleId === 2;
 
@@ -415,6 +420,44 @@ export function usePurchaseOrders() {
     );
   }, [apiSession, selectedProjectId]);
 
+  const showManualPicker = useCallback(async (poId) => {
+    setMatchPromptPoId(poId);
+    if (!apiSession || selectedProjectId == null) { setAvailableSlips([]); return; }
+    try {
+      const data = await apiFetch(`/api/packing-slips?projectId=${selectedProjectId}`, {}, apiSession);
+      setAvailableSlips(Array.isArray(data) ? data : []);
+    } catch {
+      setAvailableSlips([]);
+    }
+  }, [apiSession, selectedProjectId]);
+
+  const dismissMatchPrompt = useCallback(() => {
+    setMatchPromptPoId(null);
+  }, []);
+
+  const confirmSlipMatch = useCallback(async (slipId) => {
+    if (!apiSession || !matchPromptPoId) return;
+    setMatching(true);
+    try {
+      await apiFetch(
+        `/api/packing-slips/${slipId}/match`,
+        { method: 'PATCH', body: { poId: matchPromptPoId } },
+        apiSession,
+      );
+      setMatchPromptPoId(null);
+      await load();
+      // Also reload expanded linked slips if this is the expanded PO
+      if (expandedId === matchPromptPoId) {
+         const data = await apiFetch(`/api/purchase-orders/${expandedId}`, {}, apiSession);
+         setExpandedLinkedSlips(data.linked_slips || []);
+      }
+    } catch (e) {
+      Alert.alert('Match Error', e.message || 'Could not link to delivery slip.');
+    } finally {
+      setMatching(false);
+    }
+  }, [apiSession, matchPromptPoId, load, expandedId]);
+
   return {
     pos,
     loading,
@@ -457,5 +500,11 @@ export function usePurchaseOrders() {
     requestAmendQty,
     requestMarkFinal,
     isPM,
+    matchPromptPoId,
+    availableSlips,
+    matching,
+    showManualPicker,
+    dismissMatchPrompt,
+    confirmSlipMatch,
   };
 }

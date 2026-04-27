@@ -28,7 +28,7 @@ export default function PORequestsScreen() {
   return (
     <SafeAreaView style={s.root} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.title}>PO Requests</Text>
+        <Text style={s.title}>Requests</Text>
         {isApprover && pendingCount > 0 ? (
           <View style={s.pendingBanner}>
             <Text style={s.pendingBannerText}>

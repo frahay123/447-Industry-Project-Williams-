@@ -9,6 +9,7 @@ import {
   Modal,
   StyleSheet,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from './POScreen.styles';
@@ -115,6 +116,12 @@ export default function POScreen() {
     requestAmendQty,
     requestMarkFinal,
     isPM,
+    matchPromptPoId,
+    availableSlips,
+    matching,
+    showManualPicker,
+    dismissMatchPrompt,
+    confirmSlipMatch,
   } = usePurchaseOrders();
 
   const [previewPoId, setPreviewPoId] = useState(null);
@@ -216,49 +223,53 @@ export default function POScreen() {
 
             <Text style={styles.label}>Line items</Text>
             {items.map((item, i) => (
-              <View key={i} style={styles.lineItemRow}>
-                <View style={styles.lineItemDesc}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.description}
-                    onChangeText={(v) => updateItem(i, 'description', v)}
-                    placeholder="Material"
-                  />
+              <View key={i} style={styles.lineItemContainer}>
+                <View style={styles.lineItemTopRow}>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.description}
+                      onChangeText={(v) => updateItem(i, 'description', v)}
+                      placeholder="Material Description"
+                    />
+                  </View>
+                  {items.length > 1 ? (
+                    <Pressable
+                      style={styles.removeItemBtn}
+                      onPress={() => removeItem(i)}
+                    >
+                      <Text style={styles.removeItemText}>X</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-                <View style={styles.lineItemQty}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.quantity}
-                    onChangeText={(v) => updateItem(i, 'quantity', v)}
-                    keyboardType="number-pad"
-                    placeholder="Qty"
-                  />
+                <View style={styles.lineItemBottomRow}>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.quantity}
+                      onChangeText={(v) => updateItem(i, 'quantity', v)}
+                      keyboardType="number-pad"
+                      placeholder="Qty"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.unit}
+                      onChangeText={(v) => updateItem(i, 'unit', v)}
+                      placeholder="Unit (e.g. ea)"
+                    />
+                  </View>
+                  <View style={{ flex: 1.5 }}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.price}
+                      onChangeText={(v) => updateItem(i, 'price', v)}
+                      keyboardType="decimal-pad"
+                      placeholder="Unit Price ($)"
+                    />
+                  </View>
                 </View>
-                <View style={styles.lineItemUnit}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.unit}
-                    onChangeText={(v) => updateItem(i, 'unit', v)}
-                    placeholder="Unit"
-                  />
-                </View>
-                <View style={styles.lineItemPrice}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.price}
-                    onChangeText={(v) => updateItem(i, 'price', v)}
-                    keyboardType="decimal-pad"
-                    placeholder="$"
-                  />
-                </View>
-                {items.length > 1 ? (
-                  <Pressable
-                    style={styles.removeItemBtn}
-                    onPress={() => removeItem(i)}
-                  >
-                    <Text style={styles.removeItemText}>X</Text>
-                  </Pressable>
-                ) : null}
               </View>
             ))}
 
@@ -453,6 +464,16 @@ export default function POScreen() {
                     ))}
                   </View>
                 ) : null}
+
+                {/* Button to manually link a delivery slip */}
+                <Pressable
+                  style={{ alignSelf: 'flex-start', marginTop: 12 }}
+                  onPress={() => showManualPicker(po.id)}
+                >
+                  <Text style={{ fontSize: 13, color: '#3b82f6', fontWeight: '600' }}>
+                    + Link Delivery Slip
+                  </Text>
+                </Pressable>
               </View>
             ) : null}
           </Pressable>
@@ -466,6 +487,46 @@ export default function POScreen() {
           </Pressable>
         ) : null}
       </KeyboardSafeScroll>
+
+      {/* Manual Slip Match Modal */}
+      <Modal
+        visible={matchPromptPoId != null}
+        animationType="slide"
+        transparent
+        onRequestClose={dismissMatchPrompt}
+      >
+        <SafeAreaView style={delivStyles.modalRoot} edges={['top', 'bottom']}>
+          <View style={delivStyles.modalContent}>
+            <View style={delivStyles.modalHeader}>
+              <Text style={delivStyles.modalTitle}>Link Delivery Slip</Text>
+              <Pressable onPress={dismissMatchPrompt} style={delivStyles.closeBtn}>
+                <Text style={delivStyles.closeBtnText}>Cancel</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {availableSlips.length === 0 ? (
+                <Text style={delivStyles.modalEmpty}>No packing slips found for this job.</Text>
+              ) : null}
+              {availableSlips.map((slip) => (
+                <Pressable
+                  key={slip.id}
+                  style={delivStyles.matchPoBtn}
+                  onPress={() => confirmSlipMatch(slip.id)}
+                  disabled={matching}
+                >
+                  <Text style={delivStyles.matchPoTitle}>
+                    Slip #{slip.id} — {slip.uploaded_by}
+                  </Text>
+                  <Text style={delivStyles.matchPoMeta}>
+                    {slip.created_at ? new Date(slip.created_at).toLocaleDateString() : ''}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={previewPoId != null}

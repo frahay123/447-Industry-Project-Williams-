@@ -83,7 +83,7 @@ export function useDeliveries() {
   const [inventoryByDesc, setInventoryByDesc] = useState({});
 
   const [editingSlipId, setEditingSlipId] = useState(null);
-  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '', po_line_item_id: null }]);
+  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '', po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
   const [lineItemError, setLineItemError] = useState('');
   const [existingItems, setExistingItems] = useState({});
   const [poItems, setPoItems] = useState([]);
@@ -93,10 +93,15 @@ export function useDeliveries() {
 
   // PO matching state
   const [matchPromptSlipId, setMatchPromptSlipId] = useState(null);
-  const [suggestedMatchPo, setSuggestedMatchPo] = useState(null);
   const [unmatchedPos, setUnmatchedPos] = useState([]);
-  const [matchPromptMode, setMatchPromptMode] = useState(null); // null | 'auto' | 'manual'
   const [matching, setMatching] = useState(false);
+
+  // Reverse-link state: picking a slip to attach to a PO (from shortage section)
+  const [linkPoPickerPoId, setLinkPoPickerPoId] = useState(null);
+  const [availableSlipsForPo, setAvailableSlipsForPo] = useState([]);
+
+  // Activity Log
+  const [activities, setActivities] = useState([]);
 
   // Shipment upload parameters
   const [shipmentNumber, setShipmentNumber] = useState('1');
@@ -105,6 +110,7 @@ export function useDeliveries() {
   const canUpload = canUploadPackingSlip(session?.roleId);
   const canAddItems = canAddDeliveryItems(session?.roleId);
   const isWarehouse = session?.roleId === 4;
+  const canDeleteSlip = session?.roleId === 2;
 
   const [settings, setSettings] = useState({ warehouse1_name: '', warehouse2_name: '' });
 
@@ -183,6 +189,9 @@ export function useDeliveries() {
     setLoading(true);
     setError('');
     try {
+      const activitiesData = await apiFetch(`/api/projects/${selectedProjectId}/activities`, {}, apiSession).catch(() => []);
+      setActivities(Array.isArray(activitiesData) ? activitiesData : []);
+
       await Promise.all([
         refreshProjects(),
         loadSlips(),
@@ -258,16 +267,24 @@ export function useDeliveries() {
       setExistingItems((prev) => ({ ...prev, [slipId]: Array.isArray(items) ? items : [] }));
       
       const slip = slips.find(s => s.id === slipId);
-      if (slip?.matched_po_id) {
-        const poData = await apiFetch(`/api/purchase-orders/${slip.matched_po_id}`, {}, apiSession);
-        setPoItems(poData.items || []);
+      if (slip?.linked_pos && slip.linked_pos.length > 0) {
+        const allItems = [];
+        for (const poLink of slip.linked_pos) {
+          try {
+            const poData = await apiFetch(`/api/purchase-orders/${poLink.id}`, {}, apiSession);
+            if (poData.items) {
+              allItems.push(...poData.items.map(it => ({ ...it, po_number: poLink.po_number, po_id: poLink.id })));
+            }
+          } catch { /* ignore individual fail */ }
+        }
+        setPoItems(allItems);
       } else {
         setPoItems([]);
       }
     } catch { /* ignore */ }
   }, [apiSession, slips]);
 
-  const toggleEditSlip = useCallback((slipId) => {
+  const toggleEditSlip = useCallback(async (slipId) => {
     if (editingSlipId === slipId) {
       setEditingSlipId(null);
       setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
@@ -275,55 +292,82 @@ export function useDeliveries() {
     }
     setEditingSlipId(slipId);
     setLineItemError('');
-    loadSlipItems(slipId);
+
+    // Await the items load so we can read the fresh data
+    let loaded = [];
+    try {
+      const items = await apiFetch(`/api/packing-slips/${slipId}/items`, {}, apiSession);
+      loaded = Array.isArray(items) ? items : [];
+      setExistingItems((prev) => ({ ...prev, [slipId]: loaded }));
+
+      const slip = slips.find(s => s.id === slipId);
+      if (slip?.linked_pos && slip.linked_pos.length > 0) {
+        const allItems = [];
+        for (const poLink of slip.linked_pos) {
+          try {
+            const poData = await apiFetch(`/api/purchase-orders/${poLink.id}`, {}, apiSession);
+            if (poData.items) {
+              allItems.push(...poData.items.map(it => ({ ...it, po_number: poLink.po_number, po_id: poLink.id })));
+            }
+          } catch { /* ignore individual fail */ }
+        }
+        setPoItems(allItems);
+      } else {
+        setPoItems([]);
+      }
+    } catch { /* ignore */ }
 
     // Pre-fill from suggested items if available and no existing items yet
     const suggestions = suggestedItems[slipId];
-    const suggestionMeta = suggestedMatchPo?.id === slips.find(s => s.id === slipId)?.matched_po_id ? suggestedMatchPo : null;
-    const existing = existingItems[slipId];
-    
-    if (Array.isArray(suggestions) && suggestions.length > 0 && (!existing || existing.length === 0)) {
+
+    if (loaded.length > 0) {
+      setLineItems(
+        loaded.map((it) => ({
+          description: it.description || '',
+          quantity_received: String(it.quantity_received || 0),
+          location: it.location || defaultLocation,
+          po_line_item_id: it.po_line_item_id || null,
+          damage_qty: String(it.damage_qty || 0),
+          damage_notes: it.damage_notes || '',
+          issue_type: it.issue_type || null,
+          issue_notes: it.issue_notes || '',
+        }))
+      );
+    } else if (Array.isArray(suggestions) && suggestions.length > 0) {
       setLineItems(
         suggestions.map((it) => {
-          // Find matching PO item ID from suggestions if it exists
-          const match = suggestionMeta?.matchedPairs?.find(p => p.slipDescription === it.description);
           return {
             description: it.description || '',
             quantity_received: String(it.quantity_received || 0),
             location: defaultLocation,
-            po_line_item_id: match?.poLineItemId || null,
+            po_line_item_id: null,
           };
         }),
       );
-    } else if (Array.isArray(existing) && existing.length > 0) {
-      setLineItems(
-        existing.map((it) => ({
-          description: it.description || '',
-          quantity_received: String(it.quantity_received || 0),
-          location: defaultLocation, // existing items don't have location saved yet in this mock, but in real DB we might fetch it
-          po_line_item_id: it.po_line_item_id || null,
-          damage_qty: String(it.damage_qty || 0),
-          damage_notes: it.damage_notes || '',
-          is_wrong_item: !!it.is_wrong_item,
-          wrong_item_notes: it.wrong_item_notes || '',
-        }))
-      );
     } else {
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
     }
-  }, [editingSlipId, loadSlipItems, defaultLocation, suggestedItems, existingItems, suggestedMatchPo, slips]);
+  }, [editingSlipId, apiSession, defaultLocation, suggestedItems, slips]);
 
   const addLineItem = useCallback(() => {
-    setLineItems((prev) => [...prev, { description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
+    setLineItems((prev) => [...prev, { description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
   }, [defaultLocation]);
 
   const updateLineItem = useCallback((index, field, value) => {
     setLineItems((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
+      
+      // Auto-fill description if a PO line item is selected and description is empty
+      if (field === 'po_line_item_id' && value && !copy[index].description.trim()) {
+        const poItem = poItems.find(p => p.id === value);
+        if (poItem) {
+          copy[index].description = poItem.description;
+        }
+      }
       return copy;
     });
-  }, []);
+  }, [poItems]);
 
   const removeLineItem = useCallback((index) => {
     setLineItems((prev) => prev.filter((_, i) => i !== index));
@@ -352,15 +396,15 @@ export function useDeliveries() {
               po_line_item_id: it.po_line_item_id,
               damage_qty: parseInt(it.damage_qty, 10) || 0,
               damage_notes: it.damage_notes?.trim() || '',
-              is_wrong_item: !!it.is_wrong_item,
-              wrong_item_notes: it.wrong_item_notes?.trim() || '',
+              issue_type: it.issue_type || null,
+              issue_notes: it.issue_notes?.trim() || '',
             })),
           },
         },
         apiSession,
       );
       await loadSlipItems(editingSlipId);
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
       setEditingSlipId(null);
       setLineItemError('');
       await load();
@@ -419,12 +463,7 @@ export function useDeliveries() {
             setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
           }
 
-          // Handle PO matching suggestion
-          if (slipData.suggestedMatchPo) {
-            setSuggestedMatchPo(slipData.suggestedMatchPo);
-            setMatchPromptSlipId(slipId);
-            setMatchPromptMode('auto');
-          }
+          // After upload, editor modal will open automatically via setEditingSlipId
         }
         await load();
         await refreshProjects();
@@ -469,8 +508,6 @@ export function useDeliveries() {
         apiSession,
       );
       setMatchPromptSlipId(null);
-      setMatchPromptMode(null);
-      setSuggestedMatchPo(null);
       await load();
     } catch (e) {
       Alert.alert('Match Error', e.message || 'Could not link to PO.');
@@ -493,12 +530,10 @@ export function useDeliveries() {
 
   const dismissMatchPrompt = useCallback(() => {
     setMatchPromptSlipId(null);
-    setMatchPromptMode(null);
-    setSuggestedMatchPo(null);
   }, []);
 
-  const showManualPicker = useCallback(async () => {
-    setMatchPromptMode('manual');
+  const showManualPicker = useCallback(async (slipId) => {
+    if (slipId) setMatchPromptSlipId(slipId);
     await fetchUnmatchedPos();
   }, [fetchUnmatchedPos]);
 
@@ -558,13 +593,6 @@ export function useDeliveries() {
         } else {
           setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
         }
-
-        // Handle PO matching suggestion
-        if (slipData.suggestedMatchPo) {
-          setSuggestedMatchPo(slipData.suggestedMatchPo);
-          setMatchPromptSlipId(slipId);
-          setMatchPromptMode('auto');
-        }
       }
       await load();
       await refreshProjects();
@@ -594,7 +622,7 @@ export function useDeliveries() {
             await apiFetch(`/api/packing-slips/${slipId}`, { method: 'DELETE' }, apiSession);
             if (editingSlipId === slipId) {
               setEditingSlipId(null);
-              setLineItems([{ description: '', quantity_received: '0', location: defaultLocation }]);
+              setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
             }
             await load();
             await loadShortages();
@@ -605,6 +633,16 @@ export function useDeliveries() {
       },
     ]);
   }, [apiSession, editingSlipId, defaultLocation, load, loadShortages, loadInventoryLocations, refreshProjects]);
+
+  const completeSlip = useCallback(async (slipId) => {
+    if (!apiSession) return;
+    try {
+      await apiFetch(`/api/packing-slips/${slipId}/complete`, { method: 'POST' }, apiSession);
+      await load();
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to complete slip.');
+    }
+  }, [apiSession, load]);
 
   const promptRejectSlip = useCallback((slipId) => {
     Alert.prompt(
@@ -641,6 +679,40 @@ export function useDeliveries() {
     );
   }, [apiSession, selectedProjectId]);
 
+  const showSlipPickerForPo = useCallback(async (poId) => {
+    setLinkPoPickerPoId(poId);
+    if (!apiSession || selectedProjectId == null) { setAvailableSlipsForPo([]); return; }
+    try {
+      const data = await apiFetch(`/api/packing-slips?projectId=${selectedProjectId}`, {}, apiSession);
+      setAvailableSlipsForPo(Array.isArray(data) ? data : []);
+    } catch {
+      setAvailableSlipsForPo([]);
+    }
+  }, [apiSession, selectedProjectId]);
+
+  const dismissSlipPicker = useCallback(() => {
+    setLinkPoPickerPoId(null);
+  }, []);
+
+  const confirmSlipToPo = useCallback(async (slipId) => {
+    if (!apiSession || !linkPoPickerPoId) return;
+    setMatching(true);
+    try {
+      await apiFetch(
+        `/api/packing-slips/${slipId}/match`,
+        { method: 'PATCH', body: { poId: linkPoPickerPoId } },
+        apiSession,
+      );
+      setLinkPoPickerPoId(null);
+      await load();
+      await loadShortages();
+    } catch (e) {
+      Alert.alert('Link Error', e.message || 'Could not link slip to PO.');
+    } finally {
+      setMatching(false);
+    }
+  }, [apiSession, linkPoPickerPoId, load, loadShortages]);
+
   return {
     slips,
     loading,
@@ -672,9 +744,7 @@ export function useDeliveries() {
     loadSlipItems,
     // PO matching
     matchPromptSlipId,
-    suggestedMatchPo,
     unmatchedPos,
-    matchPromptMode,
     matching,
     confirmPoMatch,
     clearPoMatch,
@@ -686,5 +756,14 @@ export function useDeliveries() {
     setExpectedShipments,
     promptRejectSlip,
     isWarehouse,
+    canDeleteSlip,
+    completeSlip,
+    activities,
+    // Reverse-link (shortage → slip picker)
+    linkPoPickerPoId,
+    availableSlipsForPo,
+    showSlipPickerForPo,
+    dismissSlipPicker,
+    confirmSlipToPo,
   };
 }
