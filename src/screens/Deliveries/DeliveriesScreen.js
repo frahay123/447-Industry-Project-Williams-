@@ -72,6 +72,7 @@ export default function DeliveriesScreen() {
     showSlipPickerForPo,
     dismissSlipPicker,
     confirmSlipToPo,
+    unlinkSlipFromPo,
     activities,
     slipActivities,
     loadSlipActivities,
@@ -244,11 +245,7 @@ export default function DeliveriesScreen() {
           setDiscussionThread(null);
         }}
         thread={discussionThread}
-        user={{ 
-          name: session?.userName || 'User', 
-          role: session?.roleId === 2 ? 'Project Manager' : 'Warehouse',
-          token: apiSession 
-        }}
+        user={session}
       />
 
       {/* ═══ Shortage Detail Modal ═══ */}
@@ -385,22 +382,39 @@ export default function DeliveriesScreen() {
                   No packing slips uploaded for this project yet.
                 </Text>
               ) : null}
-              {availableSlipsForPo.map((slip) => (
-                <Pressable
-                  key={slip.id}
-                  style={{ padding: 14, backgroundColor: '#f0f9ff', borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#bfdbfe' }}
-                  onPress={() => confirmSlipToPo(slip.id)}
-                  disabled={matching}
-                >
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#1e3a5f' }}>
-                    Slip #{slip.slip_seq} — {slip.uploaded_by}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
-                    {slip.created_at ? new Date(slip.created_at).toLocaleDateString() : ''}
-                    {slip.linked_pos?.length > 0 ? ` · Already linked to ${slip.linked_pos.length} PO(s)` : ''}
-                  </Text>
-                </Pressable>
-              ))}
+              {availableSlipsForPo.map((slip) => {
+                const vendorName = slip.linked_pos?.length > 0 
+                  ? [...new Set(slip.linked_pos.map(p => p.vendor).filter(Boolean))].join(', ') 
+                  : '';
+                const slipDisplayName = vendorName || `Slip #${slip.slip_seq}`;
+                const isLinkedToCurrentPo = slip.linked_pos?.some(p => p.id === linkPoPickerPoId);
+
+                return (
+                  <View key={slip.id} style={{ padding: 14, backgroundColor: isLinkedToCurrentPo ? '#f0fdf4' : '#f0f9ff', borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: isLinkedToCurrentPo ? '#bbf7d0' : '#bfdbfe' }}>
+                    <Pressable
+                      onPress={() => confirmSlipToPo(slip.id)}
+                      disabled={matching}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: '#1e3a5f' }}>
+                        {slipDisplayName} — {slip.uploaded_by}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                        {slip.created_at ? new Date(slip.created_at).toLocaleDateString() : ''}
+                        {slip.linked_pos?.length > 0 ? ` · Linked to PO #${slip.linked_pos.map(p => p.po_number).join(', #')}` : ''}
+                      </Text>
+                    </Pressable>
+                    {isLinkedToCurrentPo ? (
+                      <Pressable 
+                        style={{ marginTop: 10, backgroundColor: '#fee2e2', padding: 8, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => unlinkSlipFromPo(slip.id)}
+                        disabled={matching}
+                      >
+                        <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>Unlink from this PO</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })}
             </ScrollView>
           </View>
         </SafeAreaView>
