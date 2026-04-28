@@ -150,14 +150,15 @@ export const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
   },
   itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   itemDesc: {
-    fontSize: 14,
-    color: '#334155',
-    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 6,
   },
   itemQty: {
     fontSize: 14,
