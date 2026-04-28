@@ -20,6 +20,7 @@ import KeyboardSafeScroll from '../../components/KeyboardSafeScroll';
 // New modular components
 import DeliveryCard from './components/DeliveryCard';
 import ItemEditorModal from './components/ItemEditorModal';
+import IssueDiscussionModal from '../../components/IssueDiscussionModal';
 import ShortagesAccordion from './components/ShortagesAccordion';
 import ActivityLogPanel from './components/ActivityLogPanel';
 
@@ -65,8 +66,6 @@ export default function DeliveriesScreen() {
     getPlacementsForDescription,
     loadSlipItems,
     matching,
-    promptRejectSlip,
-    isWarehouse,
     canDeleteSlip,
     linkPoPickerPoId,
     availableSlipsForPo,
@@ -74,13 +73,34 @@ export default function DeliveriesScreen() {
     dismissSlipPicker,
     confirmSlipToPo,
     activities,
+    slipActivities,
+    loadSlipActivities,
     completeSlip,
+    flagSlipIssue,
+    isWarehouse,
+    isPM,
+    apiSession,
+    session,
   } = useDeliveries();
 
   const [previewId, setPreviewId] = useState(null);
   const [shortageDetail, setShortageDetail] = useState(null);
   const [slipDetailId, setSlipDetailId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [discussionThread, setDiscussionThread] = useState(null);
+  const [discussionVisible, setDiscussionVisible] = useState(false);
+
+  const openDiscussion = (item) => {
+    setDiscussionThread({
+      id: item.thread_id,
+      status: item.thread_status,
+      item_description: item.description,
+      packing_slip_id: editingSlipId,
+      slip_label: slips.find(s => s.id === editingSlipId)?.slip_seq,
+      po_number: poItems.find(p => p.id === item.po_line_item_id)?.po_number
+    });
+    setDiscussionVisible(true);
+  };
 
   const editorSlip = editingSlipId != null ? slips.find(s => s.id === editingSlipId) : null;
 
@@ -148,9 +168,6 @@ export default function DeliveriesScreen() {
           />
         ) : null}
 
-        {/* Activity Log - Moved to bottom */}
-
-
         {/* Uploaded Slips */}
         {!needsProject && !loading && slips.length === 0 ? (
           <EmptyState title="No packing slips yet" />
@@ -166,9 +183,19 @@ export default function DeliveriesScreen() {
             onDelete={(id) => confirmDeleteSlip(id)}
             onPreview={(id) => setPreviewId(id)}
             onComplete={(id) => completeSlip(id)}
-            canDelete={canDeleteSlip}
+            canDelete={canDeleteSlip(s)}
             canAddItems={canAddItems}
+            isPM={isPM}
             getSlipImageSource={getSlipImageSource}
+            slipActivities={slipActivities[s.id] || []}
+            loadSlipActivities={loadSlipActivities}
+            onFlagIssue={flagSlipIssue}
+            onOpenDiscussion={() => openDiscussion({ 
+              thread_id: s.thread_id, 
+              thread_status: s.thread_status,
+              description: 'Packing Slip Issue',
+              slip_label: s.slip_seq
+            })}
           />
         ))}
 
@@ -206,7 +233,22 @@ export default function DeliveriesScreen() {
         onAdd={addLineItem}
         onRemove={removeLineItem}
         onSave={handleEditorSave}
-        onCancel={() => toggleEditSlip(editingSlipId)}
+        onCancel={() => toggleEditSlip(null)}
+        onOpenDiscussion={openDiscussion}
+      />
+
+      <IssueDiscussionModal
+        visible={discussionVisible}
+        onClose={() => {
+          setDiscussionVisible(false);
+          setDiscussionThread(null);
+        }}
+        thread={discussionThread}
+        user={{ 
+          name: session?.userName || 'User', 
+          role: session?.roleId === 2 ? 'Project Manager' : 'Warehouse',
+          token: apiSession 
+        }}
       />
 
       {/* ═══ Shortage Detail Modal ═══ */}
