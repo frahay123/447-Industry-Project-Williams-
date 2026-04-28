@@ -122,6 +122,7 @@ export default function POScreen() {
     showManualPicker,
     dismissMatchPrompt,
     confirmSlipMatch,
+    unlinkSlipMatch,
   } = usePurchaseOrders();
 
   const [previewPoId, setPreviewPoId] = useState(null);
@@ -274,7 +275,7 @@ export default function POScreen() {
             ))}
 
             <Pressable style={styles.addItemBtn} onPress={addItem}>
-              <Text style={styles.addItemText}>+ Add item</Text>
+              <Text style={styles.addItemText}>+ Add Line Item</Text>
             </Pressable>
 
             {saveError ? <Text style={styles.msg}>{saveError}</Text> : null}
@@ -401,11 +402,22 @@ export default function POScreen() {
                   return (
                     <View key={it.id} style={styles.itemRow}>
                       <Text style={styles.itemDesc}>{it.description}</Text>
-                      <Text style={styles.itemQty}>
-                        {it.quantity} {it.unit}
-                        {it.unit_price != null ? ` · $${Number(it.unit_price).toFixed(2)}` : ''}
-                      </Text>
-                      <View style={delivStyles.progressRow}>
+                      
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.itemQty}>
+                          {it.quantity} {it.unit}
+                          {it.unit_price != null ? ` · $${Number(it.unit_price).toFixed(2)}` : ''}
+                        </Text>
+                        
+                        <Pressable 
+                          onPress={() => requestAmendQty(po.id, it.id, it.quantity)}
+                          style={{ backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                        >
+                          <Text style={{ fontSize: 13, color: '#ca8a04', fontWeight: '700' }}>Amend Qty</Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={[delivStyles.progressRow, { marginTop: 8 }]}>
                         <View style={delivStyles.progressBar}>
                           <View style={[
                             delivStyles.progressFill,
@@ -417,33 +429,10 @@ export default function POScreen() {
                           {delivered}/{ordered} delivered
                         </Text>
                       </View>
+
                       {it.is_final ? (
-                        <Text style={poS.finalLabel}>✓ Final — no more expected</Text>
+                        <Text style={[poS.finalLabel, { marginTop: 4 }]}>✓ Final — no more expected</Text>
                       ) : null}
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                        {it.backorder_date ? (
-                          <Text style={poS.backorderLabel}>
-                            📦 Backorder: {new Date(it.backorder_date).toLocaleDateString()}
-                          </Text>
-                        ) : <View />}
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                          {!isComplete ? (
-                            <Pressable onPress={() => requestMarkFinal(po.id, it.id)}>
-                              <Text style={{ fontSize: 12, color: '#059669', fontWeight: '600' }}>Mark Final</Text>
-                            </Pressable>
-                          ) : null}
-                          <Pressable onPress={() => requestAmendQty(po.id, it.id, it.quantity)}>
-                            <Text style={{ fontSize: 12, color: '#ca8a04', fontWeight: '600' }}>Amend Qty</Text>
-                          </Pressable>
-                          {isPM ? (
-                            <Pressable onPress={() => setBackorderDate(po.id, it.id)}>
-                              <Text style={{ fontSize: 12, color: '#3b82f6', fontWeight: '600' }}>
-                                {it.backorder_date ? 'Edit Date' : '+ Set Backorder Date'}
-                              </Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </View>
                     </View>
                   );
                 })}
@@ -466,14 +455,7 @@ export default function POScreen() {
                 ) : null}
 
                 {/* Button to manually link a delivery slip */}
-                <Pressable
-                  style={{ alignSelf: 'flex-start', marginTop: 12 }}
-                  onPress={() => showManualPicker(po.id)}
-                >
-                  <Text style={{ fontSize: 13, color: '#3b82f6', fontWeight: '600' }}>
-                    + Link Delivery Slip
-                  </Text>
-                </Pressable>
+                {/* Link Delivery Slip button removed from PO screen */}
               </View>
             ) : null}
           </Pressable>
@@ -495,34 +477,52 @@ export default function POScreen() {
         transparent
         onRequestClose={dismissMatchPrompt}
       >
-        <SafeAreaView style={delivStyles.modalRoot} edges={['top', 'bottom']}>
-          <View style={delivStyles.modalContent}>
-            <View style={delivStyles.modalHeader}>
-              <Text style={delivStyles.modalTitle}>Link Delivery Slip</Text>
-              <Pressable onPress={dismissMatchPrompt} style={delivStyles.closeBtn}>
-                <Text style={delivStyles.closeBtnText}>Cancel</Text>
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} edges={['top', 'bottom']}>
+          <View style={{ flex: 1, backgroundColor: '#ffffff', marginTop: 60, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#0f172a' }}>Link Delivery Slip to PO</Text>
+              <Pressable onPress={dismissMatchPrompt}>
+                <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '600' }}>Cancel</Text>
               </Pressable>
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 16 }}>
               {availableSlips.length === 0 ? (
-                <Text style={delivStyles.modalEmpty}>No packing slips found for this job.</Text>
+                <Text style={{ fontSize: 14, color: '#6b7280', fontStyle: 'italic', textAlign: 'center', marginTop: 24 }}>No packing slips found for this job.</Text>
               ) : null}
-              {availableSlips.map((slip) => (
-                <Pressable
-                  key={slip.id}
-                  style={delivStyles.matchPoBtn}
-                  onPress={() => confirmSlipMatch(slip.id)}
-                  disabled={matching}
-                >
-                  <Text style={delivStyles.matchPoTitle}>
-                    Slip #{slip.id} — {slip.uploaded_by}
-                  </Text>
-                  <Text style={delivStyles.matchPoMeta}>
-                    {slip.created_at ? new Date(slip.created_at).toLocaleDateString() : ''}
-                  </Text>
-                </Pressable>
-              ))}
+              {availableSlips.map((slip) => {
+                const vendorName = slip.linked_pos?.length > 0 
+                  ? [...new Set(slip.linked_pos.map(p => p.vendor).filter(Boolean))].join(', ') 
+                  : '';
+                const slipDisplayName = vendorName || `Slip #${slip.id}`;
+                const isLinkedToCurrentPo = slip.linked_pos?.some(p => p.id === matchPromptPoId);
+
+                return (
+                  <View key={slip.id} style={{ padding: 14, backgroundColor: isLinkedToCurrentPo ? '#f0fdf4' : '#f0f9ff', borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: isLinkedToCurrentPo ? '#bbf7d0' : '#bfdbfe' }}>
+                    <Pressable
+                      onPress={() => confirmSlipMatch(slip.id)}
+                      disabled={matching}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: '#1e3a5f' }}>
+                        {slipDisplayName} — {slip.uploaded_by}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                        {slip.created_at ? new Date(slip.created_at).toLocaleDateString() : ''}
+                        {slip.linked_pos?.length > 0 ? ` · Linked to PO #${slip.linked_pos.map(p => p.po_number).join(', #')}` : ''}
+                      </Text>
+                    </Pressable>
+                    {isLinkedToCurrentPo ? (
+                      <Pressable 
+                        style={{ marginTop: 10, backgroundColor: '#fee2e2', padding: 8, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => unlinkSlipMatch(slip.id)}
+                        disabled={matching}
+                      >
+                        <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>Unlink from this PO</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })}
             </ScrollView>
           </View>
         </SafeAreaView>
