@@ -1,13 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Platform, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 
-const ISSUE_TYPE_OPTIONS = [
-  { value: 'WRONG_ITEM', label: 'Wrong Item' },
-  { value: 'DAMAGED', label: 'Damaged' },
-  { value: 'MISSING', label: 'Missing' },
-  { value: 'OVER_DELIVERY', label: 'Over-delivery' },
-];
+// Issue types removed per simplification request
 
 const PICKER_STYLE = Platform.OS === 'ios' ? { width: '100%', height: 120 } : { width: '100%' };
 const PICKER_ITEM_STYLE = Platform.OS === 'ios' ? { height: 120, fontSize: 14 } : undefined;
@@ -19,11 +14,11 @@ export default function LineItemCard({
   locationOptions = [],
   onUpdate,
   onRemove,
+  onOpenDiscussion,
   canRemove = true,
+  readOnly = false,
 }) {
-  const [showDamage, setShowDamage] = useState(
-    () => (parseInt(item.damage_qty, 10) || 0) > 0 || !!item.damage_notes?.trim()
-  );
+  // Damage tracking state removed per simplification request
 
   const locVal =
     item.location && locationOptions.some((o) => o.id === item.location)
@@ -34,7 +29,7 @@ export default function LineItemCard({
     ? poItems.find(p => p.id === item.po_line_item_id)
     : null;
 
-  const hasDamage = (parseInt(item.damage_qty, 10) || 0) > 0;
+
 
   return (
     <View style={s.card}>
@@ -43,23 +38,25 @@ export default function LineItemCard({
         <View style={{ flex: 3 }}>
           <Text style={s.fieldLabel}>Description</Text>
           <TextInput
-            style={s.input}
+            style={[s.input, readOnly && s.inputReadOnly]}
             value={item.description}
             onChangeText={(v) => onUpdate(index, 'description', v)}
             placeholder="Item name"
+            editable={!readOnly}
           />
         </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={s.fieldLabel}>Qty</Text>
           <TextInput
-            style={s.input}
+            style={[s.input, readOnly && s.inputReadOnly]}
             value={item.quantity_received}
             onChangeText={(v) => onUpdate(index, 'quantity_received', v)}
             keyboardType="number-pad"
             placeholder="0"
+            editable={!readOnly}
           />
         </View>
-        {canRemove ? (
+        {canRemove && !readOnly ? (
           <Pressable style={s.removeBtn} onPress={() => onRemove(index)}>
             <Text style={s.removeBtnText}>✕</Text>
           </Pressable>
@@ -69,12 +66,13 @@ export default function LineItemCard({
       {/* Row 2: Location */}
       <View style={s.fieldRow}>
         <Text style={s.fieldLabel}>Location</Text>
-        <View style={s.pickerShell}>
+        <View style={[s.pickerShell, readOnly && s.inputReadOnly]}>
           <Picker
             selectedValue={locVal}
             onValueChange={(v) => onUpdate(index, 'location', v)}
             style={PICKER_STYLE}
             itemStyle={PICKER_ITEM_STYLE}
+            enabled={!readOnly}
           >
             {locationOptions.map((opt) => (
               <Picker.Item key={opt.id} label={opt.label} value={opt.id} />
@@ -87,12 +85,13 @@ export default function LineItemCard({
       {poItems.length > 0 ? (
         <View style={s.fieldRow}>
           <Text style={s.fieldLabel}>Matches PO Item</Text>
-          <View style={[s.pickerShell, { borderColor: '#3b82f6' }]}>
+          <View style={[s.pickerShell, { borderColor: '#3b82f6' }, readOnly && s.inputReadOnly]}>
             <Picker
               selectedValue={item.po_line_item_id}
               onValueChange={(v) => onUpdate(index, 'po_line_item_id', v)}
               style={PICKER_STYLE}
               itemStyle={PICKER_ITEM_STYLE}
+              enabled={!readOnly}
             >
               <Picker.Item label="None / Manual Item" value={null} />
               {poItems.map((p) => (
@@ -107,100 +106,6 @@ export default function LineItemCard({
         </View>
       ) : null}
 
-      {/* Row 4: Damage section (collapsible) */}
-      <Pressable
-        style={[s.sectionToggle, hasDamage && s.sectionToggleActive]}
-        onPress={() => setShowDamage(!showDamage)}
-      >
-        <Text style={[s.sectionToggleText, hasDamage && { color: '#b91c1c' }]}>
-          {hasDamage ? `${item.damage_qty} damaged` : 'Damage Tracking'}
-        </Text>
-        <Text style={s.sectionChevron}>{showDamage ? '▲' : '▼'}</Text>
-      </Pressable>
-
-      {showDamage ? (
-        <View style={s.damageContent}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.fieldLabel}>Damaged Qty</Text>
-              <TextInput
-                style={s.input}
-                value={item.damage_qty}
-                onChangeText={(v) => onUpdate(index, 'damage_qty', v)}
-                keyboardType="numeric"
-                placeholder="0"
-              />
-            </View>
-            <View style={{ flex: 2 }}>
-              <Text style={s.fieldLabel}>Damage Notes</Text>
-              <TextInput
-                style={s.input}
-                value={item.damage_notes}
-                onChangeText={(v) => onUpdate(index, 'damage_notes', v)}
-                placeholder="e.g. Scratched, broken"
-              />
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Row 5: Flag Issue toggle */}
-      <View style={[s.issueSection, item.issue_type ? s.issueSectionActive : null]}>
-        <Pressable
-          style={s.issueToggle}
-          onPress={() => onUpdate(index, 'issue_type', item.issue_type ? null : 'WRONG_ITEM')}
-        >
-          <View style={[s.checkbox, item.issue_type ? s.checkboxActive : null]} />
-          <Text style={[s.issueToggleText, item.issue_type ? s.issueToggleTextActive : null]}>
-            Flag Issue
-          </Text>
-        </Pressable>
-
-        {item.issue_type ? (
-          <>
-            {/* Issue type picker */}
-            <View style={[s.fieldRow, { marginTop: 8 }]}>
-              <Text style={s.fieldLabel}>Issue Type</Text>
-              <View style={[s.pickerShell, { borderColor: '#ef4444' }]}>
-                <Picker
-                  selectedValue={item.issue_type}
-                  onValueChange={(v) => onUpdate(index, 'issue_type', v)}
-                  style={PICKER_STYLE}
-                  itemStyle={PICKER_ITEM_STYLE}
-                >
-                  {ISSUE_TYPE_OPTIONS.map((opt) => (
-                    <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
-            {/* Issue notes */}
-            <View style={{ marginTop: 8 }}>
-              <Text style={s.fieldLabel}>Notes</Text>
-              <TextInput
-                style={[s.input, { minHeight: 60, textAlignVertical: 'top' }]}
-                value={item.issue_notes || ''}
-                onChangeText={(v) => onUpdate(index, 'issue_notes', v)}
-                placeholder="Describe the issue..."
-                multiline
-              />
-            </View>
-
-            {/* PM request info banner */}
-            <View style={s.infoBanner}>
-              <Text style={s.infoBannerText}>
-                This will create a request for the PM to review and follow up with the vendor.
-              </Text>
-              {linkedPoItem ? (
-                <Text style={s.infoBannerLink}>
-                  Linked to PO #{linkedPoItem.po_seq || linkedPoItem.po_number} — {linkedPoItem.description}
-                </Text>
-              ) : null}
-            </View>
-          </>
-        ) : null}
-      </View>
     </View>
   );
 }
@@ -243,6 +148,11 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#0f172a',
+  },
+  inputReadOnly: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    color: '#64748b',
   },
   pickerShell: {
     borderWidth: 1,
@@ -332,10 +242,10 @@ const s = StyleSheet.create({
     color: '#92400e',
     lineHeight: 17,
   },
-  infoBannerLink: {
-    fontSize: 11,
-    color: '#991b1b',
-    fontStyle: 'italic',
+  helperText: {
+    fontSize: 12,
+    color: '#718096',
     marginTop: 4,
+    fontStyle: 'italic',
   },
 });

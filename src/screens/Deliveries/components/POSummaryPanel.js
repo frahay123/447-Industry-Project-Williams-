@@ -58,7 +58,7 @@ export default function POSummaryPanel({ poItems = [], lineItems = [] }) {
 
       result.push({
         poId: po.poId,
-        label: `PO #${po.poSeq || po.poNumber}`,
+        label: `PO #${po.poNumber}`,
         totalOrdered,
         totalDelivered: Math.min(totalDelivered, totalOrdered),
         remaining,

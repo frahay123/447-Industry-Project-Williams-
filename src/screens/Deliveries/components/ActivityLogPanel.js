@@ -8,6 +8,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const ACTION_LABELS = {
   uploaded: 'Uploaded packing slip',
   items_logged: 'Logged items',
+  items_edited: 'Edited items post-completion',
   rejected: 'Rejected delivery',
   linked_po: 'Linked to PO',
   unlinked_po: 'Unlinked from PO',
@@ -15,11 +16,12 @@ const ACTION_LABELS = {
   completed: 'Marked delivery as complete',
 };
 
-export default function ActivityLogPanel({ activities = [] }) {
-  const [expanded, setExpanded] = useState(false);
+export default function ActivityLogPanel({ activities = [], isGlobal = true }) {
+  const [expanded, setExpanded] = useState(isGlobal ? false : true);
   if (!activities || activities.length === 0) return null;
 
   const toggle = () => {
+    if (!isGlobal) return; // Always expanded for per-slip
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded(!expanded);
   };
@@ -27,11 +29,14 @@ export default function ActivityLogPanel({ activities = [] }) {
   const displayList = expanded ? activities : activities.slice(0, 3);
 
   return (
-    <View style={s.container}>
-      <Pressable style={s.headerRow} onPress={toggle}>
-        <Text style={s.title}>Recent Activity</Text>
-        <Text style={s.chevron}>{expanded ? '▲' : '▼'}</Text>
-      </Pressable>
+    <View style={[s.container, !isGlobal && s.containerInline]}>
+      {isGlobal && (
+        <Pressable style={s.headerRow} onPress={toggle}>
+          <Text style={s.title}>Recent Activity</Text>
+          <Text style={s.chevron}>{expanded ? '▲' : '▼'}</Text>
+        </Pressable>
+      )}
+      {!isGlobal && <Text style={s.inlineTitle}>Slip Activity</Text>}
       
       <View style={s.timeline}>
         {displayList.map((act, idx) => {
@@ -42,13 +47,26 @@ export default function ActivityLogPanel({ activities = [] }) {
           let details = '';
           if (act.payload) {
             if (act.action === 'items_logged' && act.payload.itemCount !== undefined) {
-              details = `Logged ${act.payload.itemCount} item(s)`;
+              const itemsText = act.payload.itemNames ? ` (${act.payload.itemNames})` : '';
+              details = `Logged ${act.payload.itemCount} item${act.payload.itemCount !== 1 ? 's' : ''}${itemsText}`;
+            } else if (act.action === 'items_edited' && act.payload.itemCount) {
+              const itemsText = act.payload.itemNames ? ` (${act.payload.itemNames})` : '';
+              details = `Edited ${act.payload.itemCount} item${act.payload.itemCount !== 1 ? 's' : ''}${itemsText}`;
             } else if (act.action === 'linked_po' && act.payload.poId) {
-              details = `Linked to PO #${act.payload.poId}`;
+              const poLabel = act.payload.poNum || `#${act.payload.poId}`;
+              details = `Linked to PO #${poLabel}`;
+            } else if (act.action === 'unlinked_po' && act.payload.poId) {
+              const poLabel = act.payload.poNum || `#${act.payload.poId}`;
+              details = `Unlinked from PO #${poLabel}`;
             } else if (act.action === 'rejected' && act.payload.reason) {
               details = `Reason: ${act.payload.reason}`;
             }
           }
+
+          const slipNum = act.slip_seq || act.payload?.slipSeq || act.entity_id;
+          const slipLabel = (isGlobal && act.entity_type === 'packing_slip') 
+            ? `[Slip #${slipNum}] ` 
+            : '';
 
           return (
             <View key={act.id} style={s.item}>
@@ -58,7 +76,7 @@ export default function ActivityLogPanel({ activities = [] }) {
               </View>
               <View style={s.content}>
                 <Text style={s.header}>
-                  <Text style={s.user}>{act.user_name}</Text> {label}
+                  {slipLabel}<Text style={s.user}>{act.user_name}</Text> {label}
                 </Text>
                 {details ? <Text style={s.details}>{details}</Text> : null}
                 <Text style={s.time}>
@@ -146,23 +164,37 @@ const s = StyleSheet.create({
     paddingBottom: 20,
   },
   header: {
-    fontSize: 14,
-    color: '#334155',
-    lineHeight: 20,
+    fontSize: 15,
+    color: '#1e293b',
+    lineHeight: 22,
   },
   user: {
     fontWeight: '700',
     color: '#0f172a',
   },
   details: {
-    fontSize: 13,
-    color: '#64748b',
-    marginTop: 2,
+    fontSize: 14,
+    color: '#475569',
+    marginTop: 3,
     fontStyle: 'italic',
   },
   time: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#64748b',
     marginTop: 4,
+  },
+  containerInline: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
+    marginBottom: 0,
+  },
+  inlineTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

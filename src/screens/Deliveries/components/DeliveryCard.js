@@ -1,4 +1,6 @@
-import { View, Text, Pressable, Image, Linking, StyleSheet } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, Pressable, Image, Linking, StyleSheet, LayoutAnimation } from 'react-native';
+import ActivityLogPanel from './ActivityLogPanel';
 
 const ISSUE_TYPES = { WRONG_ITEM: 'Wrong Item', DAMAGED: 'Damaged', MISSING: 'Missing', OVER_DELIVERY: 'Over-delivery' };
 
@@ -6,14 +8,19 @@ export default function DeliveryCard({
   slip,
   existingItems = [],
   onLogItems,
-  onReject,
-  onDelete,
   onPreview,
   onComplete,
+  onFlagIssue,
+  onOpenDiscussion,
+  onDelete,
   canDelete = false,
   canAddItems = false,
+  isPM = false,
   getSlipImageSource,
+  slipActivities = [],
+  loadSlipActivities,
 }) {
+  const [showActivities, setShowActivities] = useState(false);
   const itemCount = existingItems.length || (slip.item_count || 0);
   const issueCount = existingItems.length > 0 
     ? existingItems.filter(it => it.issue_type).length 
@@ -66,7 +73,7 @@ export default function DeliveryCard({
             {linkedPos.map((po) => (
               <View key={po.id} style={s.poPill}>
                 <Text style={s.poPillText}>
-                  PO #{po.po_seq} ({po.po_number})
+                  PO #{po.po_number}
                   {po.vendor ? ` — ${po.vendor}` : ''}
                 </Text>
               </View>
@@ -100,29 +107,54 @@ export default function DeliveryCard({
 
       {/* Footer actions */}
       <View style={s.footer}>
-        {canAddItems && !slip.signed_by ? (
+        {canAddItems ? (
           <Pressable style={[s.actionBtn, s.actionPrimary]} onPress={() => onLogItems(slip.id)}>
             <Text style={[s.actionBtnText, s.actionPrimaryText]}>
-              {itemCount > 0 ? 'Edit Items' : 'Log Items'}
+              {slip.signed_by ? 'View Items' : (itemCount > 0 ? 'Edit Items' : 'Log Items')}
             </Text>
           </Pressable>
         ) : null}
-        {itemCount > 0 && !slip.signed_by ? (
+        {itemCount > 0 && !slip.signed_by && !isPM ? (
           <Pressable style={[s.actionBtn, s.actionComplete]} onPress={() => onComplete(slip.id)}>
             <Text style={[s.actionBtnText, s.actionCompleteText]}>Mark Complete</Text>
           </Pressable>
         ) : null}
-        {!slip.is_rejected && !slip.signed_by ? (
-          <Pressable style={[s.actionBtn, s.actionDanger]} onPress={() => onReject(slip.id)}>
-            <Text style={[s.actionBtnText, s.actionDangerText]}>Reject</Text>
+
+        {slip.thread_id ? (
+          <Pressable style={[s.actionBtn, s.actionDiscussion]} onPress={onOpenDiscussion}>
+            <Text style={s.actionDiscussionText}>Messages</Text>
+            {slip.thread_status === 'open' && <View style={s.activeDot} />}
           </Pressable>
-        ) : null}
-        {canDelete && !slip.signed_by ? (
+        ) : (!slip.signed_by ? (
+          <Pressable style={[s.actionBtn, s.actionReject]} onPress={() => onFlagIssue(slip.id)}>
+            <Text style={[s.actionBtnText, s.actionRejectText]}>Flag Issue</Text>
+          </Pressable>
+        ) : null)}
+        <Pressable 
+          style={[s.actionBtn, s.actionSecondary]} 
+          onPress={() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            if (!showActivities) loadSlipActivities(slip.id);
+            setShowActivities(!showActivities);
+          }}
+        >
+          <Text style={[s.actionBtnText, s.actionSecondaryText]}>
+            {showActivities ? 'Hide Activity' : 'Recent Activity'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {showActivities && (
+        <View style={s.activitySection}>
+          <ActivityLogPanel activities={slipActivities} isGlobal={false} />
+        </View>
+      )}
+
+      {canDelete && !slip.signed_by ? (
           <Pressable style={[s.actionBtn, s.actionDanger]} onPress={() => onDelete(slip.id)}>
             <Text style={[s.actionBtnText, s.actionDangerText]}>Delete</Text>
           </Pressable>
         ) : null}
-      </View>
     </View>
   );
 }
@@ -220,4 +252,39 @@ const s = StyleSheet.create({
   actionDangerText: { color: '#991b1b' },
   actionComplete: { backgroundColor: '#f0fdf4', borderColor: '#dcfce7', borderWidth: 1 },
   actionCompleteText: { color: '#16a34a' },
+  actionReject: { backgroundColor: '#fef2f2' },
+  actionRejectText: {
+    color: '#dc2626',
+  },
+  actionSecondaryText: {
+    color: '#475569',
+  },
+  actionSecondary: {
+    backgroundColor: '#f1f5f9',
+  },
+  actionDiscussion: {
+    backgroundColor: '#ebf8ff',
+    borderColor: '#bee3f8',
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionDiscussionText: {
+    color: '#3182ce',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e53e3e',
+    marginLeft: 6,
+  },
+  activitySection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 12,
+  },
 });

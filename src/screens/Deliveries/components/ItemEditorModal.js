@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Modal } from 'react-native';
@@ -17,9 +18,16 @@ export default function ItemEditorModal({
   onRemove,
   onSave,
   onCancel,
+  onOpenDiscussion,
 }) {
   const insets = useSafeAreaInsets();
+  const [isModifying, setIsModifying] = useState(false);
 
+  useEffect(() => {
+    if (!visible) setIsModifying(false);
+  }, [visible]);
+
+  const readOnly = !!slip?.signed_by && !isModifying;
   const issueCount = lineItems.filter(it => it.issue_type).length;
   const itemCount = lineItems.filter(it => it.description?.trim()).length;
 
@@ -37,20 +45,26 @@ export default function ItemEditorModal({
       animationType="slide"
       onRequestClose={onCancel}
     >
-      <SafeAreaView style={s.root} edges={['top', 'bottom']}>
+      <SafeAreaView style={s.root} edges={['bottom']}>
         {/* Header */}
-        <View style={s.header}>
+        <View style={[s.header, { paddingTop: Math.max(insets.top, 14) }]}>
           <Pressable onPress={onCancel} hitSlop={12}>
-            <Text style={s.cancelBtn}>Cancel</Text>
+            <Text style={s.cancelBtn}>{readOnly ? 'Close' : 'Cancel'}</Text>
           </Pressable>
           <Text style={s.headerTitle} numberOfLines={1}>
-            {slip ? `Slip #${slip.slip_seq}` : 'Edit Items'}
+            {slip ? (readOnly ? `Viewing Slip #${slip.slip_seq}` : `Slip #${slip.slip_seq}`) : 'Edit Items'}
           </Text>
-          <Pressable onPress={handleSave} disabled={saving} hitSlop={12}>
-            <Text style={[s.saveBtn, saving && { opacity: 0.5 }]}>
-              {saving ? 'Saving…' : 'Save'}
-            </Text>
-          </Pressable>
+          {readOnly ? (
+            <Pressable onPress={() => setIsModifying(true)} hitSlop={12}>
+              <Text style={s.saveBtn}>Modify</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={handleSave} disabled={saving} hitSlop={12}>
+              <Text style={[s.saveBtn, saving && { opacity: 0.5 }]}>
+                {saving ? 'Saving…' : 'Save'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Body */}
@@ -71,14 +85,18 @@ export default function ItemEditorModal({
               locationOptions={locationOptions}
               onUpdate={onUpdate}
               onRemove={onRemove}
+              onOpenDiscussion={onOpenDiscussion}
               canRemove={lineItems.length > 1}
+              readOnly={readOnly}
             />
           ))}
 
           {/* Add row */}
-          <Pressable style={s.addRowBtn} onPress={onAdd}>
-            <Text style={s.addRowText}>+ Add Item</Text>
-          </Pressable>
+          {!readOnly && (
+            <Pressable style={s.addRowBtn} onPress={onAdd}>
+              <Text style={s.addRowText}>+ Add Item</Text>
+            </Pressable>
+          )}
 
           {/* Error message */}
           {error ? <Text style={s.errorText}>{error}</Text> : null}
@@ -94,13 +112,15 @@ export default function ItemEditorModal({
         </ScrollView>
 
         {/* Floating save button */}
-        <View style={[s.floatSave, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable style={[s.saveButton, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
-            <Text style={s.saveButtonText}>
-              {saving ? 'Saving…' : `Save ${itemCount} Item${itemCount !== 1 ? 's' : ''}`}
-            </Text>
-          </Pressable>
-        </View>
+        {!readOnly && (
+          <View style={[s.floatSave, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <Pressable style={[s.saveButton, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
+              <Text style={s.saveButtonText}>
+                {saving ? 'Saving…' : `Save ${itemCount} Item${itemCount !== 1 ? 's' : ''}`}
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -113,7 +133,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 14,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
