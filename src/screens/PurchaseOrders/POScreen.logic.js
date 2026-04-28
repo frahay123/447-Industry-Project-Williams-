@@ -361,7 +361,7 @@ export function usePurchaseOrders() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Request',
+          text: 'Amend',
           onPress: async (qtyStr) => {
             const newQty = parseInt(qtyStr, 10);
             if (!newQty || newQty <= 0) {
@@ -369,19 +369,14 @@ export function usePurchaseOrders() {
               return;
             }
             try {
-              await apiFetch('/api/po-change-requests', {
-                method: 'POST',
-                body: {
-                  projectId: selectedProjectId,
-                  purchaseOrderId: poId,
-                  poLineItemId: liId,
-                  requestType: 'amend_line_qty',
-                  payload: { newQty },
-                },
+              await apiFetch(`/api/po-line-items/${liId}`, {
+                method: 'PUT',
+                body: { quantity: newQty },
               }, apiSession);
-              Alert.alert('Success', 'Amendment request sent to PM.');
+              Alert.alert('Success', 'Quantity amended.');
+              load();
             } catch (e) {
-              Alert.alert('Error', e.message || 'Could not submit request.');
+              Alert.alert('Error', e.message || 'Could not update quantity.');
             }
           },
         },
@@ -448,8 +443,8 @@ export function usePurchaseOrders() {
       await load();
       // Also reload expanded linked slips if this is the expanded PO
       if (expandedId === matchPromptPoId) {
-         const data = await apiFetch(`/api/purchase-orders/${expandedId}`, {}, apiSession);
-         setExpandedLinkedSlips(data.linked_slips || []);
+        const data = await apiFetch(`/api/purchase-orders/${expandedId}`, {}, apiSession);
+        setExpandedLinkedSlips(data.linked_slips || []);
       }
     } catch (e) {
       Alert.alert('Match Error', e.message || 'Could not link to delivery slip.');
