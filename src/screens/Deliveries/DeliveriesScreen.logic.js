@@ -719,6 +719,25 @@ export function useDeliveries() {
     }
   }, [apiSession, linkPoPickerPoId, load, loadShortages]);
 
+  const unlinkSlipFromPo = useCallback(async (slipId) => {
+    if (!apiSession || !linkPoPickerPoId) return;
+    setMatching(true);
+    try {
+      await apiFetch(
+        `/api/packing-slips/${slipId}/match`,
+        { method: 'PATCH', body: { poId: linkPoPickerPoId, unlink: true } },
+        apiSession,
+      );
+      setLinkPoPickerPoId(null);
+      await load();
+      await loadShortages();
+    } catch (e) {
+      Alert.alert('Unlink Error', e.message || 'Could not unlink slip from PO.');
+    } finally {
+      setMatching(false);
+    }
+  }, [apiSession, linkPoPickerPoId, load, loadShortages]);
+
   return {
     slips,
     loading,
@@ -774,6 +793,7 @@ export function useDeliveries() {
     showSlipPickerForPo,
     dismissSlipPicker,
     confirmSlipToPo,
+    unlinkSlipFromPo,
     apiSession,
     session,
   };
