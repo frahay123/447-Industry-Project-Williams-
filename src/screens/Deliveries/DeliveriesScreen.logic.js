@@ -83,7 +83,7 @@ export function useDeliveries() {
   const [inventoryByDesc, setInventoryByDesc] = useState({});
 
   const [editingSlipId, setEditingSlipId] = useState(null);
-  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '', po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
+  const [lineItems, setLineItems] = useState([{ description: '', quantity_received: '0', location: '', po_line_item_id: null, issue_flag: false, issue_message: '' }]);
   const [lineItemError, setLineItemError] = useState('');
   const [existingItems, setExistingItems] = useState({});
   const [poItems, setPoItems] = useState([]);
@@ -102,6 +102,7 @@ export function useDeliveries() {
 
   // Activity Log
   const [activities, setActivities] = useState([]);
+  const [slipActivities, setSlipActivities] = useState({}); // { slipId: [acts] }
 
   // Shipment upload parameters
   const [shipmentNumber, setShipmentNumber] = useState('1');
@@ -109,8 +110,12 @@ export function useDeliveries() {
 
   const canUpload = canUploadPackingSlip(session?.roleId);
   const canAddItems = canAddDeliveryItems(session?.roleId);
+  const isPM = session?.roleId === 2;
   const isWarehouse = session?.roleId === 4;
-  const canDeleteSlip = session?.roleId === 2;
+
+  const canDeleteSlip = useCallback((slip) => {
+    return isPM && !slip.signed_by;
+  }, [isPM]);
 
   const [settings, setSettings] = useState({ warehouse1_name: '', warehouse2_name: '' });
 
@@ -284,6 +289,14 @@ export function useDeliveries() {
     } catch { /* ignore */ }
   }, [apiSession, slips]);
 
+  const loadSlipActivities = useCallback(async (slipId) => {
+    if (!apiSession) return;
+    try {
+      const data = await apiFetch(`/api/packing-slips/${slipId}/activities`, {}, apiSession);
+      setSlipActivities(prev => ({ ...prev, [slipId]: Array.isArray(data) ? data : [] }));
+    } catch { /* ignore */ }
+  }, [apiSession]);
+
   const toggleEditSlip = useCallback(async (slipId) => {
     if (editingSlipId === slipId) {
       setEditingSlipId(null);
@@ -394,17 +407,15 @@ export function useDeliveries() {
               quantity_received: parseInt(it.quantity_received, 10) || 0,
               location: coerceLoc(it.location),
               po_line_item_id: it.po_line_item_id,
-              damage_qty: parseInt(it.damage_qty, 10) || 0,
-              damage_notes: it.damage_notes?.trim() || '',
-              issue_type: it.issue_type || null,
-              issue_notes: it.issue_notes?.trim() || '',
+              issue_flag: !!it.issue_flag,
+              issue_message: it.issue_message || '',
             })),
           },
         },
         apiSession,
       );
       await loadSlipItems(editingSlipId);
-      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null, damage_qty: '0', damage_notes: '', issue_type: null, issue_notes: '' }]);
+      setLineItems([{ description: '', quantity_received: '0', location: defaultLocation, po_line_item_id: null, issue_flag: false, issue_message: '' }]);
       setEditingSlipId(null);
       setLineItemError('');
       await load();
@@ -644,40 +655,35 @@ export function useDeliveries() {
     }
   }, [apiSession, load]);
 
-  const promptRejectSlip = useCallback((slipId) => {
+  const flagSlipIssue = useCallback((slipId) => {
     Alert.prompt(
-      'Request Delivery Rejection',
-      'Please provide a reason for rejecting this delivery. A request will be sent to the PM for approval.',
+      'Flag Slip Issue',
+      'Describe the issue with this packing slip. This will start a conversation with the PM.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Request',
-          style: 'destructive',
-          onPress: async (reason) => {
-            if (!reason?.trim()) {
-              Alert.alert('Error', 'A rejection reason is required.');
-              return;
-            }
+          text: 'Send',
+          onPress: async (message) => {
+            if (!message?.trim()) return;
             try {
-              await apiFetch('/api/po-change-requests', {
+              await apiFetch('/api/issue-threads/from-slip', {
                 method: 'POST',
                 body: {
                   projectId: selectedProjectId,
                   packingSlipId: slipId,
-                  requestType: 'reject_slip',
-                  payload: { reason: reason.trim() },
+                  message: message.trim(),
                 },
               }, apiSession);
-              Alert.alert('Success', 'Rejection request sent to PM.');
+              await load();
             } catch (e) {
-              Alert.alert('Error', e.message || 'Failed to submit request.');
+              Alert.alert('Error', e.message || 'Failed to flag issue.');
             }
           },
         },
       ],
       'plain-text'
     );
-  }, [apiSession, selectedProjectId]);
+  }, [selectedProjectId, apiSession, load]);
 
   const showSlipPickerForPo = useCallback(async (poId) => {
     setLinkPoPickerPoId(poId);
@@ -754,16 +760,21 @@ export function useDeliveries() {
     setShipmentNumber,
     expectedShipments,
     setExpectedShipments,
-    promptRejectSlip,
+    flagSlipIssue,
     isWarehouse,
+    isPM,
     canDeleteSlip,
     completeSlip,
     activities,
+    slipActivities,
+    loadSlipActivities,
     // Reverse-link (shortage → slip picker)
     linkPoPickerPoId,
     availableSlipsForPo,
     showSlipPickerForPo,
     dismissSlipPicker,
     confirmSlipToPo,
+    apiSession,
+    session,
   };
 }
