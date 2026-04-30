@@ -1,141 +1,129 @@
+import { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePoRequests } from './PORequestsScreen.logic';
 import { EmptyState } from '../../components/EmptyState';
-
-const STATUS_COLORS = {
-  pending: { bg: '#fef3c7', text: '#92400e', label: 'Pending' },
-  approved: { bg: '#dcfce7', text: '#166534', label: 'Approved' },
-  rejected: { bg: '#fee2e2', text: '#991b1b', label: 'Rejected' },
-};
+import IssueDiscussionModal from '../../components/IssueDiscussionModal';
 
 export default function PORequestsScreen() {
   const {
-    requests,
+    threads = [],
     loading,
     error,
-    isApprover,
-    pendingCount,
-    approveRequest,
-    promptReject,
+    isPM,
     reload,
-    requestTypeLabel,
+    resolveThread,
+    session,
+    apiSession
   } = usePoRequests();
 
-  const pending = requests.filter(r => r.status === 'pending');
-  const reviewed = requests.filter(r => r.status !== 'pending');
+  const [activeThread, setActiveThread] = useState(null);
+
+  const openThread = (t) => {
+    setActiveThread(t);
+  };
+
+  const pending = (threads || []).filter(t => t.status === 'open');
+  const resolved = (threads || []).filter(t => t.status === 'resolved');
 
   return (
     <SafeAreaView style={s.root} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.title}>Requests</Text>
-        {isApprover && pendingCount > 0 ? (
-          <View style={s.pendingBanner}>
-            <Text style={s.pendingBannerText}>
-              🔔 {pendingCount} pending request{pendingCount > 1 ? 's' : ''} need your review
-            </Text>
-          </View>
-        ) : null}
+        <Text style={s.title}>Communications</Text>
 
         {error ? <Text style={s.errorText}>{error}</Text> : null}
-        {loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
+        {loading && <ActivityIndicator style={{ marginVertical: 16 }} />}
 
-        {!loading && requests.length === 0 ? (
-          <EmptyState title={isApprover ? 'No requests yet' : 'No requests submitted'} />
-        ) : null}
+        {!loading && threads.length === 0 && (
+          <EmptyState title="No communications yet" />
+        )}
 
-        {pending.length > 0 ? (
+        {pending.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>Pending</Text>
-            {pending.map(r => (
-              <RequestCard
-                key={r.id}
-                request={r}
-                isApprover={isApprover}
-                onApprove={() => approveRequest(r.id)}
-                onReject={() => promptReject(r.id)}
-                requestTypeLabel={requestTypeLabel}
+            <Text style={s.sectionLabel}>Active Issues</Text>
+            {pending.map(t => (
+              <ThreadCard
+                key={t.id}
+                thread={t}
+                onPress={() => openThread(t)}
+                onResolve={() => resolveThread(t.id)}
+                isPM={isPM}
               />
             ))}
           </>
-        ) : null}
+        )}
 
-        {reviewed.length > 0 ? (
+        {resolved.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>Reviewed</Text>
-            {reviewed.map(r => (
-              <RequestCard
-                key={r.id}
-                request={r}
-                isApprover={isApprover}
-                requestTypeLabel={requestTypeLabel}
+            <Text style={s.sectionLabel}>Resolved</Text>
+            {resolved.map(t => (
+              <ThreadCard
+                key={t.id}
+                thread={t}
+                onPress={() => openThread(t)}
+                isPM={isPM}
               />
             ))}
           </>
-        ) : null}
-
-        {error ? (
-          <Pressable onPress={reload}>
-            <Text style={s.retryText}>Retry</Text>
-          </Pressable>
-        ) : null}
+        )}
       </ScrollView>
+
+      <IssueDiscussionModal
+        visible={!!activeThread}
+        onClose={() => setActiveThread(null)}
+        thread={activeThread}
+        user={{
+          name: session?.userName || 'User',
+          role: session?.roleId === 2 ? 'Project Manager' : 'Warehouse',
+          token: apiSession
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-function RequestCard({ request: r, isApprover, onApprove, onReject, requestTypeLabel }) {
-  const sc = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
+function ThreadCard({ thread: t, onPress, onResolve, isPM }) {
+  const isOpen = t.status === 'open';
   return (
-    <View style={s.card}>
+    <Pressable style={s.card} onPress={onPress}>
       <View style={s.cardHeader}>
-        <Text style={s.cardType}>{requestTypeLabel(r.request_type)}</Text>
-        <View style={[s.badge, { backgroundColor: sc.bg }]}>
-          <Text style={[s.badgeText, { color: sc.text }]}>{sc.label}</Text>
+        <Text style={s.cardType}>{t.item_description}</Text>
+        <View style={[s.badge, { backgroundColor: isOpen ? '#ebf8ff' : '#f0fff4' }]}>
+          <Text style={[s.badgeText, { color: isOpen ? '#3182ce' : '#38a169' }]}>
+            {isOpen ? 'ACTIVE' : 'RESOLVED'}
+          </Text>
         </View>
       </View>
 
-      {r.po_number ? (
-        <Text style={s.cardMeta}>PO #{r.po_number}</Text>
-      ) : null}
-      {r.line_description ? (
-        <Text style={s.cardMeta}>Line: {r.line_description}</Text>
-      ) : null}
-
-      {/* Payload summary */}
-      {Object.keys(r.payload || {}).length > 0 ? (
-        <View style={s.payloadBox}>
-          {Object.entries(r.payload).map(([k, v]) => (
-            <Text key={k} style={s.payloadRow}>
-              <Text style={s.payloadKey}>{k}:</Text> {String(v)}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-
       <Text style={s.cardMeta}>
-        Submitted by <Text style={{ fontWeight: '700' }}>{r.requested_by}</Text>
-        {' · '}{r.requested_at ? new Date(r.requested_at).toLocaleDateString() : ''}
+        Slip #{t.slip_label || t.packing_slip_id} {t.po_number ? `· PO #${t.po_number}` : ''}
       </Text>
 
-      {r.reviewed_by ? (
-        <Text style={s.cardMeta}>
-          Reviewed by {r.reviewed_by}
-          {r.review_notes ? ` — "${r.review_notes}"` : ''}
-        </Text>
-      ) : null}
+      <Text style={s.cardMeta}>
+        Project: <Text style={{ fontWeight: '600' }}>{t.project_name}</Text>
+      </Text>
 
-      {isApprover && r.status === 'pending' ? (
-        <View style={s.actionRow}>
-          <Pressable style={[s.actionBtn, s.approveBtn]} onPress={onApprove}>
-            <Text style={s.approveBtnText}>✓ Approve</Text>
-          </Pressable>
-          <Pressable style={[s.actionBtn, s.rejectBtn]} onPress={onReject}>
-            <Text style={s.rejectBtnText}>✕ Reject</Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+      <View style={s.cardFooter}>
+        <Text style={s.messageCount}>
+          💬 {t.message_count} message{t.message_count !== 1 ? 's' : ''}
+        </Text>
+        <Text style={s.timeText}>
+          Updated {new Date(t.updated_at).toLocaleDateString()}
+        </Text>
+      </View>
+
+      {isPM && isOpen && onResolve && (
+        <Pressable
+          style={s.resolveBtn}
+          onPress={(e) => {
+            e.stopPropagation();
+            onResolve();
+          }}
+        >
+          <Text style={s.resolveBtnText}>Mark as Resolved</Text>
+        </Pressable>
+      )}
+    </Pressable>
   );
 }
 
@@ -143,15 +131,6 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 16, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
-  pendingBanner: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-  },
-  pendingBannerText: { color: '#92400e', fontWeight: '700', fontSize: 14 },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',
@@ -173,19 +152,30 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardType: { fontSize: 15, fontWeight: '700', color: '#1e293b', flex: 1 },
-  badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, marginLeft: 8 },
-  badgeText: { fontSize: 12, fontWeight: '700' },
-  cardMeta: { fontSize: 13, color: '#64748b', marginTop: 4 },
-  payloadBox: { backgroundColor: '#f1f5f9', borderRadius: 8, padding: 10, marginVertical: 8 },
-  payloadRow: { fontSize: 13, color: '#374151', marginBottom: 2 },
-  payloadKey: { fontWeight: '700', color: '#0f172a' },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-  approveBtn: { backgroundColor: '#dcfce7' },
-  approveBtnText: { color: '#166534', fontWeight: '700', fontSize: 14 },
-  rejectBtn: { backgroundColor: '#fee2e2' },
-  rejectBtnText: { color: '#991b1b', fontWeight: '700', fontSize: 14 },
+  cardType: { fontSize: 16, fontWeight: '700', color: '#1e293b', flex: 1 },
+  badge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 8 },
+  badgeText: { fontSize: 10, fontWeight: '800' },
+  cardMeta: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  messageCount: { fontSize: 12, fontWeight: '600', color: '#4a5568' },
+  timeText: { fontSize: 11, color: '#a0aec0' },
+  resolveBtn: {
+    marginTop: 12,
+    backgroundColor: '#f0fff4',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#c6f6d5',
+  },
+  resolveBtnText: { color: '#2f855a', fontWeight: '700', fontSize: 12 },
   errorText: { color: '#dc2626', fontSize: 14, marginBottom: 8 },
-  retryText: { color: '#3b82f6', fontWeight: '600', marginTop: 8 },
 });
