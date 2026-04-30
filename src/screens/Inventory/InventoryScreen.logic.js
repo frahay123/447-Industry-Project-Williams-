@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
@@ -10,16 +10,54 @@ import {
 
 export function useInventory() {
   const { session, apiSession } = useAuth();
-  const { selectedProjectId, refreshProjects } = useProject();
+  const { projects, selectedProjectId, refreshProjects } = useProject();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('1');
-  const [location, setLocation] = useState('warehouse');
+  const [location, setLocation] = useState('');
   const [saveError, setSaveError] = useState('');
 
-  const canAdd = canAddInventoryItem(session?.roleId);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterLocation, setFilterLocation] = useState('');
+
+  const [settings, setSettings] = useState({ warehouse1_name: '', warehouse2_name: '' });
+
+  const loadSettings = useCallback(async () => {
+    if (!apiSession) return;
+    try {
+      const data = await apiFetch('/api/settings', {}, apiSession);
+      if (data) {
+        setSettings(data);
+        if (data.warehouse1_name?.trim()) {
+          setLocation(data.warehouse1_name.trim());
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load settings', e);
+    }
+  }, [apiSession]);
+
+  const locationOptions = useMemo(() => {
+    const opts = [];
+    if (settings.warehouse1_name?.trim()) {
+      opts.push(settings.warehouse1_name.trim());
+    }
+    if (settings.warehouse2_name?.trim()) {
+      opts.push(settings.warehouse2_name.trim());
+    }
+    const sel = projects.find((p) => p.id === selectedProjectId);
+    if (sel?.location?.trim()) {
+      opts.push(sel.location.trim());
+    }
+    if (opts.length === 0) {
+      opts.push('warehouse', 'yard', 'jobsite', 'transit');
+    }
+    return opts;
+  }, [settings, projects, selectedProjectId]);
+
+  const canAdd = canAddInventoryItem(session?.roleId) || session?.roleId === 'project_manager';
   const canAdjustQty = canAdjustInventoryQuantity(session?.roleId);
 
   const load = useCallback(async () => {
@@ -53,12 +91,14 @@ export function useInventory() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      loadSettings();
+    }, [load, loadSettings]),
   );
 
   useEffect(() => {
     load();
-  }, [selectedProjectId, load]);
+    loadSettings();
+  }, [selectedProjectId, load, loadSettings]);
 
   const addItem = useCallback(async () => {
     setSaveError('');
@@ -117,8 +157,16 @@ export function useInventory() {
     [items, apiSession, load],
   );
 
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesName = !searchQuery || (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesLoc = !filterLocation || item.location === filterLocation;
+      return matchesName && matchesLoc;
+    });
+  }, [items, searchQuery, filterLocation]);
+
   return {
-    items,
+    items: filteredItems,
     loading,
     error,
     canAdd,
@@ -134,5 +182,10 @@ export function useInventory() {
     addItem,
     changeQty,
     reload: load,
+    searchQuery,
+    setSearchQuery,
+    filterLocation,
+    setFilterLocation,
+    locationOptions,
   };
 }
