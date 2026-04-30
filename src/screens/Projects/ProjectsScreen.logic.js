@@ -48,6 +48,17 @@ export function useProjects() {
 
   const createProject = useCallback(async () => {
     setSaveError('');
+<<<<<<< HEAD
+=======
+    if (!name.trim()) {
+      setSaveError('Name is required.');
+      return;
+    }
+    if (!location.trim()) {
+      setSaveError('Location is required.');
+      return;
+    }
+>>>>>>> main
     try {
       const row = await apiFetch(
         '/api/projects',
@@ -56,7 +67,11 @@ export function useProjects() {
           body: {
             name: name.trim(),
             jobNumber: jobNumber.trim() || undefined,
+<<<<<<< HEAD
             location: location.trim() || undefined,
+=======
+            location: location.trim(),
+>>>>>>> main
           },
         },
         apiSession,

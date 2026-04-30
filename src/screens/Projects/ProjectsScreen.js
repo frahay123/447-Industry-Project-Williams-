@@ -59,7 +59,11 @@ export default function ProjectsScreen() {
               onChangeText={setJobNumber}
               autoCapitalize="characters"
             />
+<<<<<<< HEAD
             <Text style={styles.label}>Location (optional)</Text>
+=======
+            <Text style={styles.label}>Location</Text>
+>>>>>>> main
             <TextInput
               style={styles.input}
               value={location}

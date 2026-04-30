@@ -56,6 +56,10 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
   removeBtn: {
+<<<<<<< HEAD
+=======
+    marginTop: 12,
+>>>>>>> main
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -68,6 +72,51 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#b91c1c',
   },
+<<<<<<< HEAD
+=======
+  actionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  saveBtn: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cancelBtn: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  cancelBtnText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+>>>>>>> main
   rowUser: {
     fontSize: 16,
     fontWeight: '700',
