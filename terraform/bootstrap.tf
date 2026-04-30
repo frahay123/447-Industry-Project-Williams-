@@ -1,4 +1,4 @@
-# Zip repo ../backend and upload so EC2 user_data stays under the 16 KiB limit.
+# Zip repo  user_data stays under the 16 KiB limit.
 
 data "archive_file" "api_bootstrap" {
   type        = "zip"
