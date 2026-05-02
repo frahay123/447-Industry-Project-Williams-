@@ -7,16 +7,26 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const ACTION_LABELS = {
   uploaded: 'Uploaded packing slip',
-  items_logged: 'Logged items',
-  items_edited: 'Edited items post-completion',
+  items_logged: 'Logged delivery items',
+  items_edited: 'Edited delivery items',
   rejected: 'Rejected delivery',
-  linked_po: 'Linked to PO',
-  unlinked_po: 'Unlinked from PO',
+  linked_po: 'Linked PO',
+  unlinked_po: 'Unlinked PO',
   deleted: 'Deleted packing slip',
   completed: 'Marked delivery as complete',
 };
 
-export default function ActivityLogPanel({ activities = [], isGlobal = true }) {
+/** Format a PO reference from an activity payload object.
+ *  Prefers the human-facing sequential number (poSeq) + po_number string.
+ *  Falls back gracefully for older log entries that only stored poId. */
+function formatPoLabel(p) {
+  if (p.poSeq && p.poNum) return `PO #${p.poSeq} (${p.poNum})`;
+  if (p.poNum) return `PO #${p.poNum}`;
+  if (p.poId)  return `PO (ref #${p.poId})`;
+  return 'PO';
+}
+
+export default function ActivityLogPanel({ activities = [], isGlobal = true, slips = [] }) {
   const [expanded, setExpanded] = useState(isGlobal ? false : true);
   if (!activities || activities.length === 0) return null;
 
@@ -46,26 +56,34 @@ export default function ActivityLogPanel({ activities = [], isGlobal = true }) {
           
           let details = '';
           if (act.payload) {
-            if (act.action === 'items_logged' && act.payload.itemCount !== undefined) {
-              const itemsText = act.payload.itemNames ? ` (${act.payload.itemNames})` : '';
-              details = `Logged ${act.payload.itemCount} item${act.payload.itemCount !== 1 ? 's' : ''}${itemsText}`;
-            } else if (act.action === 'items_edited' && act.payload.itemCount) {
-              const itemsText = act.payload.itemNames ? ` (${act.payload.itemNames})` : '';
-              details = `Edited ${act.payload.itemCount} item${act.payload.itemCount !== 1 ? 's' : ''}${itemsText}`;
+            if ((act.action === 'items_logged' || act.action === 'items_edited') && act.payload.itemCount !== undefined) {
+              const verb = act.action === 'items_edited' ? 'Edited' : 'Logged';
+              const count = act.payload.itemCount;
+              const plural = count !== 1 ? 's' : '';
+              const assignments = act.payload.poAssignments;
+              if (assignments && assignments.length > 0) {
+                const poLabels = assignments.map(formatPoLabel).join(', ');
+                details = `${verb} ${count} item${plural} — assigned to ${poLabels}`;
+              } else {
+                const itemsText = act.payload.itemNames ? ` (${act.payload.itemNames})` : '';
+                details = `${verb} ${count} item${plural}${itemsText}`;
+              }
             } else if (act.action === 'linked_po' && act.payload.poId) {
-              const poLabel = act.payload.poNum || `#${act.payload.poId}`;
-              details = `Linked to PO #${poLabel}`;
+              details = `Linked to ${formatPoLabel(act.payload)}`;
             } else if (act.action === 'unlinked_po' && act.payload.poId) {
-              const poLabel = act.payload.poNum || `#${act.payload.poId}`;
-              details = `Unlinked from PO #${poLabel}`;
+              details = `Unlinked from ${formatPoLabel(act.payload)}`;
             } else if (act.action === 'rejected' && act.payload.reason) {
               details = `Reason: ${act.payload.reason}`;
             }
           }
 
+          const slipId = Number(act.entity_id);
+          const slipObj = slips.find(s => Number(s.id) === slipId);
+          const vendorNames = slipObj?.linked_pos?.map(p => p.vendor).filter(Boolean).join(', ');
+
           const slipNum = act.slip_seq || act.payload?.slipSeq || act.entity_id;
           const slipLabel = (isGlobal && act.entity_type === 'packing_slip') 
-            ? `[Slip #${slipNum}] ` 
+            ? `[${vendorNames ? vendorNames : `Slip #${slipNum}`}] ` 
             : '';
 
           return (
