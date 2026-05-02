@@ -102,7 +102,17 @@ export function useDeliveries() {
 
   // Activity Log
   const [activities, setActivities] = useState([]);
-  const [slipActivities, setSlipActivities] = useState({}); // { slipId: [acts] }
+  const slipActivities = useMemo(() => {
+    const map = {};
+    activities.forEach(act => {
+      if (act.entity_type === 'packing_slip') {
+        const id = Number(act.entity_id);
+        if (!map[id]) map[id] = [];
+        map[id].push(act);
+      }
+    });
+    return map;
+  }, [activities]);
 
   // Shipment upload parameters
   const [shipmentNumber, setShipmentNumber] = useState('1');
@@ -110,8 +120,8 @@ export function useDeliveries() {
 
   const canUpload = canUploadPackingSlip(session?.roleId);
   const canAddItems = canAddDeliveryItems(session?.roleId);
-  const isPM = session?.roleId === 2;
-  const isWarehouse = session?.roleId === 4;
+  const isPM = session?.roleId === 'project_manager';
+  const isWarehouse = session?.roleId === 'warehouse_staff';
 
   const canDeleteSlip = useCallback((slip) => {
     return isPM && !slip.signed_by;
@@ -270,7 +280,7 @@ export function useDeliveries() {
     try {
       const items = await apiFetch(`/api/packing-slips/${slipId}/items`, {}, apiSession);
       setExistingItems((prev) => ({ ...prev, [slipId]: Array.isArray(items) ? items : [] }));
-      
+
       const slip = slips.find(s => s.id === slipId);
       if (slip?.linked_pos && slip.linked_pos.length > 0) {
         const allItems = [];
@@ -370,7 +380,7 @@ export function useDeliveries() {
     setLineItems((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
-      
+
       // Auto-fill description if a PO line item is selected and description is empty
       if (field === 'po_line_item_id' && value && !copy[index].description.trim()) {
         const poItem = poItems.find(p => p.id === value);
@@ -520,15 +530,26 @@ export function useDeliveries() {
       );
       setMatchPromptSlipId(null);
       await load();
+      await loadShortages();
+      await loadInventoryLocations();
     } catch (e) {
       Alert.alert('Match Error', e.message || 'Could not link to PO.');
     } finally {
       setMatching(false);
     }
-  }, [apiSession, load]);
+  }, [apiSession, load, loadShortages, loadInventoryLocations]);
 
-  const clearPoMatch = useCallback(async (slipId, poId) => {
+  const unlinkSlipFromPo = useCallback(async (slipId, poId) => {
     if (!apiSession) return;
+    // Optimistic: immediately remove the PO pill from the picker modal so the UI
+    // updates without waiting for the round-trip.
+    setAvailableSlipsForPo(prev =>
+      prev.map(s =>
+        s.id === slipId
+          ? { ...s, linked_pos: (s.linked_pos || []).filter(p => p.id !== poId) }
+          : s,
+      ),
+    );
     try {
       await apiFetch(
         `/api/packing-slips/${slipId}/match`,
@@ -536,8 +557,17 @@ export function useDeliveries() {
         apiSession,
       );
       await load();
-    } catch { /* ignore */ }
-  }, [apiSession, load]);
+      await loadShortages();
+      await loadInventoryLocations();
+    } catch {
+      // Revert optimistic update on failure by re-fetching
+      if (selectedProjectId != null) {
+        apiFetch(`/api/packing-slips?projectId=${selectedProjectId}`, {}, apiSession)
+          .then(data => setAvailableSlipsForPo(Array.isArray(data) ? data : []))
+          .catch(() => {});
+      }
+    }
+  }, [apiSession, load, loadShortages, loadInventoryLocations, selectedProjectId]);
 
   const dismissMatchPrompt = useCallback(() => {
     setMatchPromptSlipId(null);
@@ -551,13 +581,13 @@ export function useDeliveries() {
   const scanAndUpload = useCallback(async () => {
     setUploadError('');
     if (selectedProjectId == null) { setUploadError('Select a job on the Dashboard first.'); return; }
-    
+
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { setUploadError('Camera permission is required.'); return; }
-    
+
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
     if (result.canceled || !result.assets?.[0]) return;
-    
+
     await processAndUploadImage(result.assets[0].uri, result.assets[0].mimeType);
   }, [selectedProjectId, processAndUploadImage]);
 
@@ -655,35 +685,40 @@ export function useDeliveries() {
     }
   }, [apiSession, load]);
 
-  const flagSlipIssue = useCallback((slipId) => {
+  const promptRejectSlip = useCallback((slipId) => {
     Alert.prompt(
-      'Flag Slip Issue',
-      'Describe the issue with this packing slip. This will start a conversation with the PM.',
+      'Request Delivery Rejection',
+      'Please provide a reason for rejecting this delivery. A request will be sent to the PM for approval.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Send',
-          onPress: async (message) => {
-            if (!message?.trim()) return;
+          text: 'Request',
+          style: 'destructive',
+          onPress: async (reason) => {
+            if (!reason?.trim()) {
+              Alert.alert('Error', 'A rejection reason is required.');
+              return;
+            }
             try {
-              await apiFetch('/api/issue-threads/from-slip', {
+              await apiFetch('/api/po-change-requests', {
                 method: 'POST',
                 body: {
                   projectId: selectedProjectId,
                   packingSlipId: slipId,
-                  message: message.trim(),
+                  requestType: 'reject_slip',
+                  payload: { reason: reason.trim() },
                 },
               }, apiSession);
-              await load();
+              Alert.alert('Success', 'Rejection request sent to PM.');
             } catch (e) {
-              Alert.alert('Error', e.message || 'Failed to flag issue.');
+              Alert.alert('Error', e.message || 'Failed to submit request.');
             }
           },
         },
       ],
       'plain-text'
     );
-  }, [selectedProjectId, apiSession, load]);
+  }, [apiSession, selectedProjectId]);
 
   const showSlipPickerForPo = useCallback(async (poId) => {
     setLinkPoPickerPoId(poId);
@@ -695,6 +730,13 @@ export function useDeliveries() {
       setAvailableSlipsForPo([]);
     }
   }, [apiSession, selectedProjectId]);
+
+  // Keep picker list in sync whenever slips refresh while the modal is open.
+  useEffect(() => {
+    if (linkPoPickerPoId != null) {
+      setAvailableSlipsForPo(slips);
+    }
+  }, [slips, linkPoPickerPoId]);
 
   const dismissSlipPicker = useCallback(() => {
     setLinkPoPickerPoId(null);
@@ -714,25 +756,6 @@ export function useDeliveries() {
       await loadShortages();
     } catch (e) {
       Alert.alert('Link Error', e.message || 'Could not link slip to PO.');
-    } finally {
-      setMatching(false);
-    }
-  }, [apiSession, linkPoPickerPoId, load, loadShortages]);
-
-  const unlinkSlipFromPo = useCallback(async (slipId) => {
-    if (!apiSession || !linkPoPickerPoId) return;
-    setMatching(true);
-    try {
-      await apiFetch(
-        `/api/packing-slips/${slipId}/match`,
-        { method: 'PATCH', body: { poId: linkPoPickerPoId, unlink: true } },
-        apiSession,
-      );
-      setLinkPoPickerPoId(null);
-      await load();
-      await loadShortages();
-    } catch (e) {
-      Alert.alert('Unlink Error', e.message || 'Could not unlink slip from PO.');
     } finally {
       setMatching(false);
     }
@@ -772,14 +795,14 @@ export function useDeliveries() {
     unmatchedPos,
     matching,
     confirmPoMatch,
-    clearPoMatch,
+    unlinkSlipFromPo,
     dismissMatchPrompt,
     showManualPicker,
     shipmentNumber,
     setShipmentNumber,
     expectedShipments,
     setExpectedShipments,
-    flagSlipIssue,
+    promptRejectSlip,
     isWarehouse,
     isPM,
     canDeleteSlip,
@@ -793,8 +816,8 @@ export function useDeliveries() {
     showSlipPickerForPo,
     dismissSlipPicker,
     confirmSlipToPo,
-    unlinkSlipFromPo,
     apiSession,
     session,
+    selectedProjectId,
   };
 }
