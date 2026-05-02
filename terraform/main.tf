@@ -1,9 +1,8 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# MEC2 Tracker — Core infrastructure
-# EC2 API server, S3 image bucket, IAM role, networking, outputs
-# ─────────────────────────────────────────────────────────────────────────────
 
-# ─── Computed values ──────────────────────────────────────────────────────────
+# MEC2 Tracker — Core infrastructure
+
+
+
 
 locals {
   project     = "mec2-tracker"
@@ -19,7 +18,7 @@ locals {
   }
 }
 
-# ─── Network data (uses the account default VPC) ─────────────────────────────
+# Network data 
 
 data "aws_vpc" "default" {
   default = true
@@ -31,6 +30,8 @@ data "aws_subnets" "in_vpc" {
     values = [local.vpc_id]
   }
 }
+
+data "aws_caller_identity" "current" {}
 
 data "aws_ami" "al2023" {
   most_recent = true
@@ -47,14 +48,14 @@ data "aws_ami" "al2023" {
   }
 }
 
-# ─── SSH Key Pair ─────────────────────────────────────────────────────────────
+#SSH Key Pair
 
 resource "aws_key_pair" "deploy" {
   key_name   = "${local.project}-deploy-${local.environment}"
   public_key = local.ssh_public_key
 }
 
-# ─── EC2 Security Group ──────────────────────────────────────────────────────
+#EC2 Security Group 
 
 resource "aws_security_group" "ec2" {
   name        = "${local.project}-ec2-sg"
@@ -103,7 +104,7 @@ resource "aws_security_group" "ec2" {
   tags = merge(local.common_tags, { Name = "${local.project}-ec2-sg" })
 }
 
-# ─── IAM Role (lets EC2 read/write S3 delivery images without hardcoded keys)─
+# IAM Role lets EC2 read/write S3 delivery images without hardcoded keys
 
 data "aws_iam_policy_document" "ec2_assume" {
   statement {
@@ -128,6 +129,17 @@ data "aws_iam_policy_document" "ec2_s3_delivery_images" {
   }
 
   statement {
+    sid    = "ObjectRWUnderPurchaseOrdersPrefix"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${aws_s3_bucket.delivery_images.arn}/purchase-orders/*"]
+  }
+
+  statement {
     sid    = "BootstrapBundleRead"
     effect = "Allow"
     actions = [
@@ -146,7 +158,7 @@ data "aws_iam_policy_document" "ec2_s3_delivery_images" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["deliveries/*"]
+      values   = ["deliveries/*", "purchase-orders/*"]
     }
   }
 }
@@ -175,7 +187,45 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# ─── EC2 Instance ─────────────────────────────────────────────────────────────
+
+
+# Bedrock invoke — Amazon Titan Text + Nova (same AWS account).
+# Foundation-model ARNs use an empty account segment. Some IDs (e.g. us.amazon.nova-*) use
+# account inference profiles — see BedrockInvokeInferenceProfile below.
+data "aws_iam_policy_document" "ec2_bedrock" {
+  statement {
+    sid    = "BedrockInvokeFoundationModel"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:Converse",
+    ]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/amazon.titan-text-*",
+      "arn:aws:bedrock:*::foundation-model/amazon.nova-*",
+    ]
+  }
+
+  statement {
+    sid    = "BedrockInvokeInferenceProfile"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:Converse",
+    ]
+    resources = [
+      "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ec2_bedrock" {
+  name   = "${local.project}-ec2-bedrock"
+  role   = aws_iam_role.ec2_app.id
+  policy = data.aws_iam_policy_document.ec2_bedrock.json
+}
+
+#EC2 Instance
 
 resource "aws_instance" "api" {
   ami                         = data.aws_ami.al2023.id
@@ -189,14 +239,15 @@ resource "aws_instance" "api" {
   iam_instance_profile        = aws_iam_instance_profile.ec2_app.name
 
   user_data = templatefile("${path.module}/user_data.tpl", {
-    ssh_public_key = local.ssh_public_key
-    db_host        = aws_db_instance.main[0].address
-    db_port        = 5432
-    db_name        = var.db_name
-    db_user        = var.db_username
-    db_password    = var.db_password != "" ? var.db_password : random_password.db[0].result
-    s3_bucket      = aws_s3_bucket.delivery_images.id
-    aws_region     = var.aws_region
+    ssh_public_key   = local.ssh_public_key
+    db_host          = aws_db_instance.main[0].address
+    db_port          = 5432
+    db_name          = var.db_name
+    db_user          = var.db_username
+    db_password      = var.db_password != "" ? var.db_password : random_password.db[0].result
+    s3_bucket        = aws_s3_bucket.delivery_images.id
+    aws_region       = var.aws_region
+    bedrock_model_id = var.bedrock_model_id
   })
 
   user_data_replace_on_change = true
@@ -227,8 +278,8 @@ resource "aws_instance" "api" {
   })
 }
 
-# Elastic IP: stable public address when the instance is replaced (same URL after taint/apply).
-# Full terraform destroy still releases the EIP; re-apply then run scripts/sync-expo-api-url.sh.
+# Elastic IP: stable public address when the instance is replaced 
+# Full terraform destroy still releases the EIP
 resource "aws_eip" "api" {
   count  = var.enable_ec2 ? 1 : 0
   domain = "vpc"
@@ -242,7 +293,7 @@ resource "aws_eip_association" "api" {
   allocation_id = aws_eip.api[0].id
 }
 
-# ─── S3 Bucket (packing slip / delivery images) ──────────────────────────────
+# S3 Bucket 
 
 resource "random_id" "bucket_suffix" {
   byte_length = 4
@@ -314,7 +365,7 @@ resource "null_resource" "delivery_images_bucket_empty_on_destroy" {
   }
 }
 
-# ─── Outputs ──────────────────────────────────────────────────────────────────
+# Outputs
 
 output "ec2_public_ip" {
   description = "Elastic IP for the API (use this for SSH and the mobile app; stable across instance replacement)."

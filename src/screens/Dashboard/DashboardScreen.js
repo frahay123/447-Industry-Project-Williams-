@@ -17,8 +17,12 @@ const STAT_TAB = {
   'Current job': 'Projects',
   'Packing slips': 'Deliveries',
   'Inventory lines': 'Inventory',
+<<<<<<< HEAD
+  'Pending requests': 'Requests',
+=======
   'Pending transfers': 'Transfers',
   'Purchase orders': 'POs',
+>>>>>>> main
 };
 
 function StatShortcut({ stat, navigation, allowedTabNames }) {
@@ -106,6 +110,8 @@ export default function DashboardScreen() {
               />
             ))}
           </Picker>
+<<<<<<< HEAD
+=======
         </View>
         {projects.length === 0 ? (
           <Text style={styles.pickerHint}>No jobs</Text>
@@ -127,8 +133,53 @@ export default function DashboardScreen() {
           <Pressable onPress={logout} style={styles.logout}>
             <Text style={styles.logoutText}>Log out</Text>
           </Pressable>
+>>>>>>> main
+        </View>
+        {projects.length === 0 ? (
+          <Text style={styles.pickerHint}>No jobs</Text>
+        ) : null}
+
+<<<<<<< HEAD
+        {apiError ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{apiError}</Text>
+            <Pressable onPress={retry}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.userCard}>
+          <Text style={styles.userMeta}>Signed in as</Text>
+          <Text style={styles.userName}>{username}</Text>
+          <Text style={styles.roleLine}>{roleLabel}</Text>
+          <Pressable onPress={logout} style={styles.logout}>
+            <Text style={styles.logoutText}>Log out</Text>
+          </Pressable>
         </View>
 
+        <View style={styles.statsRow}>
+          {stats.slice(0, 2).map((stat) => (
+            <StatShortcut
+              key={stat.label}
+              stat={stat}
+              navigation={navigation}
+              allowedTabNames={allowedTabNames}
+            />
+          ))}
+        </View>
+
+        <View style={styles.statsRow}>
+          {stats.slice(2, 4).map((stat) => (
+            <StatShortcut
+              key={stat.label}
+              stat={stat}
+              navigation={navigation}
+              allowedTabNames={allowedTabNames}
+            />
+          ))}
+        </View>
+=======
         {/* Render stats in rows of 2 */}
         {Array.from({ length: Math.ceil(stats.length / 2) }, (_, rowIdx) => (
           <View key={rowIdx} style={styles.statsRow}>
@@ -142,6 +193,7 @@ export default function DashboardScreen() {
             ))}
           </View>
         ))}
+>>>>>>> main
 
       </KeyboardSafeScroll>
     </SafeAreaView>

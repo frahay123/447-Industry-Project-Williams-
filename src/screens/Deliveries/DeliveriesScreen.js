@@ -561,4 +561,3 @@ const uploadStyles = StyleSheet.create({
   },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
-
