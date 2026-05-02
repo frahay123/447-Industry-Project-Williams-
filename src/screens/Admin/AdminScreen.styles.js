@@ -56,7 +56,10 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
   removeBtn: {
+<<<<<<< HEAD
+=======
     marginTop: 12,
+>>>>>>> main
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -69,6 +72,8 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#b91c1c',
   },
+<<<<<<< HEAD
+=======
   actionBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -111,6 +116,7 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+>>>>>>> main
   rowUser: {
     fontSize: 16,
     fontWeight: '700',

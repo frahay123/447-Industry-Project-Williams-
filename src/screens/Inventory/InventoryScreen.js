@@ -1,4 +1,7 @@
+<<<<<<< HEAD
+=======
 import { useState } from 'react';
+>>>>>>> main
 import {
   View,
   Text,
@@ -11,6 +14,11 @@ import { styles } from './InventoryScreen.styles';
 import { useInventory } from './InventoryScreen.logic';
 import { EmptyState } from '../../components/EmptyState';
 import KeyboardSafeScroll from '../../components/KeyboardSafeScroll';
+<<<<<<< HEAD
+
+const LOCATIONS = ['warehouse', 'yard', 'jobsite', 'transit'];
+=======
+>>>>>>> main
 
 export default function InventoryScreen() {
   const {
@@ -30,6 +38,9 @@ export default function InventoryScreen() {
     addItem,
     changeQty,
     reload,
+<<<<<<< HEAD
+  } = useInventory();
+=======
     searchQuery,
     setSearchQuery,
     filterLocation,
@@ -38,6 +49,7 @@ export default function InventoryScreen() {
   } = useInventory();
 
   const [showAddStock, setShowAddStock] = useState(false);
+>>>>>>> main
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -50,6 +62,62 @@ export default function InventoryScreen() {
         {loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
 
         {canAdd && !needsProject ? (
+<<<<<<< HEAD
+          <>
+            <Text style={styles.formTitle}>Add stock line</Text>
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={styles.input}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Material description"
+            />
+            <Text style={styles.label}>Quantity</Text>
+            <TextInput
+              style={styles.input}
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="number-pad"
+            />
+            <Text style={styles.label}>Location</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {LOCATIONS.map((loc) => (
+                <Pressable
+                  key={loc}
+                  onPress={() => setLocation(loc)}
+                  style={[
+                    styles.qtyBtn,
+                    location === loc && { backgroundColor: '#bfdbfe' },
+                  ]}
+                >
+                  <Text style={styles.qtyBtnText}>{loc}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {saveError ? <Text style={styles.msg}>{saveError}</Text> : null}
+            <Pressable style={styles.submit} onPress={addItem}>
+              <Text style={styles.submitText}>Add to inventory</Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {!needsProject && !loading && items.length === 0 ? (
+          <EmptyState title="No inventory" />
+        ) : null}
+
+        {items.map((item) => {
+          const colors =
+            {
+              warehouse: { bg: '#dbeafe', text: '#2563eb', border: '#3b82f6' },
+              yard: { bg: '#fef3c7', text: '#d97706', border: '#f59e0b' },
+              jobsite: { bg: '#dcfce7', text: '#16a34a', border: '#22c55e' },
+              transit: { bg: '#fee2e2', text: '#dc2626', border: '#ef4444' },
+            }[item.location] || {
+              bg: '#f1f5f9',
+              text: '#475569',
+              border: '#94a3b8',
+            };
+=======
           <View style={{ marginBottom: 16 }}>
             <Pressable 
               onPress={() => setShowAddStock(!showAddStock)}
@@ -171,6 +239,7 @@ export default function InventoryScreen() {
             return { bg: '#f1f5f9', text: '#475569', border: '#94a3b8' };
           };
           const colors = getLocationColors(item.location);
+>>>>>>> main
 
           return (
             <View

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+import { useState, useCallback, useEffect } from 'react';
+=======
 import { useState, useCallback, useEffect, useMemo } from 'react';
+>>>>>>> main
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
@@ -10,12 +14,22 @@ import {
 
 export function useInventory() {
   const { session, apiSession } = useAuth();
+<<<<<<< HEAD
+  const { selectedProjectId, refreshProjects } = useProject();
+=======
   const { projects, selectedProjectId, refreshProjects } = useProject();
+>>>>>>> main
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('1');
+<<<<<<< HEAD
+  const [location, setLocation] = useState('warehouse');
+  const [saveError, setSaveError] = useState('');
+
+  const canAdd = canAddInventoryItem(session?.roleId);
+=======
   const [location, setLocation] = useState('');
   const [saveError, setSaveError] = useState('');
 
@@ -58,6 +72,7 @@ export function useInventory() {
   }, [settings, projects, selectedProjectId]);
 
   const canAdd = canAddInventoryItem(session?.roleId) || session?.roleId === 'project_manager';
+>>>>>>> main
   const canAdjustQty = canAdjustInventoryQuantity(session?.roleId);
 
   const load = useCallback(async () => {
@@ -91,14 +106,22 @@ export function useInventory() {
   useFocusEffect(
     useCallback(() => {
       load();
+<<<<<<< HEAD
+    }, [load]),
+=======
       loadSettings();
     }, [load, loadSettings]),
+>>>>>>> main
   );
 
   useEffect(() => {
     load();
+<<<<<<< HEAD
+  }, [selectedProjectId, load]);
+=======
     loadSettings();
   }, [selectedProjectId, load, loadSettings]);
+>>>>>>> main
 
   const addItem = useCallback(async () => {
     setSaveError('');
@@ -157,6 +180,10 @@ export function useInventory() {
     [items, apiSession, load],
   );
 
+<<<<<<< HEAD
+  return {
+    items,
+=======
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchesName = !searchQuery || (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -167,6 +194,7 @@ export function useInventory() {
 
   return {
     items: filteredItems,
+>>>>>>> main
     loading,
     error,
     canAdd,
@@ -182,10 +210,13 @@ export function useInventory() {
     addItem,
     changeQty,
     reload: load,
+<<<<<<< HEAD
+=======
     searchQuery,
     setSearchQuery,
     filterLocation,
     setFilterLocation,
     locationOptions,
+>>>>>>> main
   };
 }

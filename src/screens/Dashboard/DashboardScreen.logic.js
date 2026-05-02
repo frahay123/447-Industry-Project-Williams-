@@ -2,6 +2,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
+<<<<<<< HEAD
+import { getRoleById, ROLES_REVISION } from '../../constants/roles';
+import { apiFetch } from '../../api/client';
+=======
 import { getRoleById, ROLE_IDS, ROLES_REVISION } from '../../constants/roles';
 import { apiFetch } from '../../api/client';
 
@@ -33,13 +37,23 @@ function buildStats(s, session) {
 
   return base;
 }
+>>>>>>> main
 
 export function useDashboard() {
   const { session, apiSession, logout } = useAuth();
   const { selectedProjectId, ready: projectReady } = useProject();
   const [username, setUsername] = useState('');
   const [roleLabel, setRoleLabel] = useState('');
+<<<<<<< HEAD
+  const [stats, setStats] = useState([
+    { label: 'Current job', value: '—', color: '#3b82f6' },
+    { label: 'Packing slips', value: '—', color: '#22c55e' },
+    { label: 'Inventory lines', value: '—', color: '#f59e0b' },
+    { label: 'Pending requests', value: '—', color: '#ef4444' },
+  ]);
+=======
   const [stats, setStats] = useState(EMPTY_STATS);
+>>>>>>> main
   const [apiError, setApiError] = useState('');
 
   const load = useCallback(async () => {
@@ -50,7 +64,16 @@ export function useDashboard() {
     if (!projectReady || !apiSession) return;
 
     if (selectedProjectId == null) {
+<<<<<<< HEAD
+      setStats([
+        { label: 'Current job', value: '—', color: '#3b82f6' },
+        { label: 'Packing slips', value: '—', color: '#22c55e' },
+        { label: 'Inventory lines', value: '—', color: '#f59e0b' },
+        { label: 'Pending requests', value: '—', color: '#ef4444' },
+      ]);
+=======
       setStats(EMPTY_STATS);
+>>>>>>> main
       setApiError('');
       return;
     }
@@ -62,10 +85,41 @@ export function useDashboard() {
         {},
         apiSession,
       );
+<<<<<<< HEAD
+      const jobLabel =
+        s.scope === 'project' && s.projectName
+          ? s.projectName
+          : s.scope === 'project'
+            ? '(unknown job)'
+            : '—';
+      setStats([
+        { label: 'Current job', value: jobLabel, color: '#3b82f6' },
+        { label: 'Packing slips', value: String(s.packingSlips), color: '#22c55e' },
+        {
+          label: 'Inventory lines',
+          value: String(s.inventoryItems),
+          color: '#f59e0b',
+        },
+        {
+          label: 'Pending requests',
+          value: String(s.pendingRequests),
+          color: '#ef4444',
+        },
+      ]);
+    } catch (e) {
+      setApiError(e.message || 'Could not reach the server.');
+      setStats([
+        { label: 'Current job', value: '—', color: '#3b82f6' },
+        { label: 'Packing slips', value: '—', color: '#22c55e' },
+        { label: 'Inventory lines', value: '—', color: '#f59e0b' },
+        { label: 'Pending requests', value: '—', color: '#ef4444' },
+      ]);
+=======
       setStats(buildStats(s, session));
     } catch (e) {
       setApiError(e.message || 'Could not reach the server.');
       setStats(EMPTY_STATS);
+>>>>>>> main
     }
   }, [
     session,

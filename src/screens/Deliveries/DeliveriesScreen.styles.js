@@ -79,6 +79,31 @@ export const styles = StyleSheet.create({
     marginBottom: 6,
     marginTop: 10,
   },
+<<<<<<< HEAD
+  projectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  projectChipOn: {
+    borderColor: '#3b82f6',
+    backgroundColor: '#eff6ff',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  chipTextOn: {
+    color: '#3b82f6',
+  },
+=======
+>>>>>>> main
   uploadBtn: {
     backgroundColor: '#3b82f6',
     borderRadius: 12,
@@ -97,6 +122,12 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     color: '#dc2626',
   },
+<<<<<<< HEAD
+  slipMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 6,
+=======
   slipMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -408,5 +439,6 @@ export const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '700',
     fontSize: 15,
+>>>>>>> main
   },
 });
