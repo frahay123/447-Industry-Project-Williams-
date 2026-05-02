@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { styles } from './DeliveriesScreen.styles';
 import { useDeliveries, groupSlipItemsByDescription } from './DeliveriesScreen.logic';
+import { apiFetch } from '../../api/client';
 import { EmptyState } from '../../components/EmptyState';
 import KeyboardSafeScroll from '../../components/KeyboardSafeScroll';
 
@@ -66,6 +67,12 @@ export default function DeliveriesScreen() {
     getPlacementsForDescription,
     loadSlipItems,
     matching,
+    matchPromptSlipId,
+    unmatchedPos,
+    confirmPoMatch,
+    dismissMatchPrompt,
+    promptRejectSlip,
+    isWarehouse,
     canDeleteSlip,
     linkPoPickerPoId,
     availableSlipsForPo,
@@ -73,15 +80,15 @@ export default function DeliveriesScreen() {
     dismissSlipPicker,
     confirmSlipToPo,
     unlinkSlipFromPo,
+    showManualPicker,
     activities,
     slipActivities,
     loadSlipActivities,
     completeSlip,
-    flagSlipIssue,
-    isWarehouse,
     isPM,
     apiSession,
     session,
+    selectedProjectId,
   } = useDeliveries();
 
   const [previewId, setPreviewId] = useState(null);
@@ -102,6 +109,43 @@ export default function DeliveriesScreen() {
     });
     setDiscussionVisible(true);
   };
+
+  const openDiscussionForSlip = useCallback(async (slip) => {
+    let threadId = slip.thread_id;
+    let threadStatus = slip.thread_status || 'open';
+    
+    if (!threadId) {
+      try {
+        setSaving(true);
+        const res = await apiFetch('/api/issue-threads/from-slip', {
+          method: 'POST',
+          body: {
+            projectId: selectedProjectId,
+            packingSlipId: slip.id,
+            message: 'Discussion started.'
+          }
+        }, apiSession);
+        
+        if (res && res.threadId) {
+          threadId = res.threadId;
+        }
+      } catch (e) {
+        console.error('Could not start discussion:', e);
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+    
+    setDiscussionThread({
+      id: threadId,
+      status: threadStatus,
+      item_description: 'General Discussion',
+      packing_slip_id: slip.id,
+      slip_label: slip.slip_seq,
+    });
+    setDiscussionVisible(true);
+  }, [apiSession, selectedProjectId, slips]);
 
   const editorSlip = editingSlipId != null ? slips.find(s => s.id === editingSlipId) : null;
 
@@ -179,40 +223,27 @@ export default function DeliveriesScreen() {
             key={s.id}
             slip={s}
             existingItems={existingItems[s.id] || []}
+            onLinkPO={(id) => showManualPicker(id)}
             onLogItems={(id) => toggleEditSlip(id)}
+            onOpenMessages={openDiscussionForSlip}
             onReject={(id) => promptRejectSlip(id)}
             onDelete={(id) => confirmDeleteSlip(id)}
             onPreview={(id) => setPreviewId(id)}
             onComplete={(id) => completeSlip(id)}
             canDelete={canDeleteSlip(s)}
             canAddItems={canAddItems}
-            isPM={isPM}
             getSlipImageSource={getSlipImageSource}
             slipActivities={slipActivities[s.id] || []}
             loadSlipActivities={loadSlipActivities}
-            onFlagIssue={flagSlipIssue}
-            onOpenDiscussion={() => openDiscussion({ 
-              thread_id: s.thread_id, 
-              thread_status: s.thread_status,
-              description: 'Packing Slip Issue',
-              slip_label: s.slip_seq
-            })}
           />
         ))}
 
         {/* Activity Log - Bottom placement */}
         {!needsProject && activities.length > 0 ? (
-          <ActivityLogPanel activities={activities} />
+          <ActivityLogPanel activities={activities} slips={slips} />
         ) : null}
 
-        {!needsProject && !loading ? (
-          <Pressable
-            style={styles.uploadBtn}
-            onPress={() => { /* ... handled by header usually ... */ }}
-          >
-            <Text style={styles.uploadBtnText}>Total Slips: {slips.length}</Text>
-          </Pressable>
-        ) : null}
+
 
         {error ? (
           <Pressable onPress={reload}>
@@ -245,7 +276,11 @@ export default function DeliveriesScreen() {
           setDiscussionThread(null);
         }}
         thread={discussionThread}
-        user={session}
+        user={{
+          name: session?.username || 'User',
+          role: session?.roleId || 'Warehouse',
+          token: apiSession
+        }}
       />
 
       {/* ═══ Shortage Detail Modal ═══ */}
@@ -406,12 +441,72 @@ export default function DeliveriesScreen() {
                     {isLinkedToCurrentPo ? (
                       <Pressable 
                         style={{ marginTop: 10, backgroundColor: '#fee2e2', padding: 8, borderRadius: 8, alignItems: 'center' }}
-                        onPress={() => unlinkSlipFromPo(slip.id)}
+                        onPress={() => unlinkSlipFromPo(slip.id, linkPoPickerPoId)}
                         disabled={matching}
                       >
                         <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>Unlink from this PO</Text>
                       </Pressable>
                     ) : null}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ═══ PO Picker Modal (Link PO button on card) ═══ */}
+      <Modal
+        visible={matchPromptSlipId != null}
+        animationType="slide"
+        transparent
+        onRequestClose={dismissMatchPrompt}
+      >
+        <SafeAreaView style={previewStyles.modalRoot} edges={['top', 'bottom']}>
+          <View style={{ flex: 1, backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, marginTop: 80 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+              <Text style={{ fontSize: 18, fontWeight: '700' }}>Link PO to Slip</Text>
+              <Pressable onPress={dismissMatchPrompt}>
+                <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '600' }}>Done</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {unmatchedPos.length === 0 ? (
+                <Text style={{ fontSize: 14, color: '#6b7280', fontStyle: 'italic', textAlign: 'center', marginTop: 24 }}>
+                  No purchase orders found for this project.
+                </Text>
+              ) : null}
+              {unmatchedPos.map((po) => {
+                const currentSlip = slips.find(s => s.id === matchPromptSlipId);
+                const isLinked = currentSlip?.linked_pos?.some(p => p.id === po.id);
+                return (
+                  <View
+                    key={po.id}
+                    style={{ padding: 14, backgroundColor: isLinked ? '#f0fdf4' : '#f8fafc', borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: isLinked ? '#bbf7d0' : '#e2e8f0' }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#0f172a' }}>
+                      PO #{po.po_seq} ({po.po_number}){po.vendor ? ` — ${po.vendor}` : ''}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                      {po.status} · {po.created_at ? new Date(po.created_at).toLocaleDateString() : ''}
+                    </Text>
+                    {isLinked ? (
+                      <Pressable
+                        style={{ marginTop: 10, backgroundColor: '#fee2e2', padding: 8, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => unlinkSlipFromPo(matchPromptSlipId, po.id)}
+                        disabled={matching}
+                      >
+                        <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>Unlink</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={{ marginTop: 10, backgroundColor: '#eff6ff', padding: 8, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => confirmPoMatch(matchPromptSlipId, po.id)}
+                        disabled={matching}
+                      >
+                        <Text style={{ color: '#1d4ed8', fontWeight: '700', fontSize: 13 }}>Link to this PO</Text>
+                      </Pressable>
+                    )}
                   </View>
                 );
               })}
