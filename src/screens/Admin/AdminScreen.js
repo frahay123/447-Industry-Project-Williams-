@@ -16,8 +16,10 @@ export default function AdminScreen() {
     users,
     logout,
     assignableRoles,
-    username,
-    setUsername,
+    email,
+    setEmail,
+    displayName,
+    setDisplayName,
     password,
     setPassword,
     roleId,
@@ -30,8 +32,10 @@ export default function AdminScreen() {
     onAddUser,
     confirmRemoveUser,
     editingUserId,
-    editUsername,
-    setEditUsername,
+    editEmail,
+    setEditEmail,
+    editDisplayName,
+    setEditDisplayName,
     editPassword,
     setEditPassword,
     beginEditUser,
@@ -68,11 +72,14 @@ export default function AdminScreen() {
           <View key={u.id} style={styles.card}>
             <View style={styles.cardTop}>
               <View style={styles.cardTextCol}>
-                <Text style={styles.rowUser}>{u.username}</Text>
+                <Text style={styles.rowUser}>{u.display_name}</Text>
                 <Text style={styles.rowRole}>
-                  {getRoleById(u.roleId)?.label ?? u.roleId}
-                  {u.roleId === ROLE_IDS.FOREMAN && u.foremanType
-                    ? ` \u2014 ${foremanTypeLabel(u.foremanType)}`
+                  {u.email}
+                </Text>
+                <Text style={styles.rowRole}>
+                  {getRoleById(u.role_id)?.label ?? u.role_id}
+                  {u.role_id === ROLE_IDS.FOREMAN && u.foreman_type
+                    ? ` \u2014 ${foremanTypeLabel(u.foreman_type)}`
                     : ''}
                 </Text>
               </View>
@@ -85,13 +92,21 @@ export default function AdminScreen() {
             </View>
             {editingUserId === u.id ? (
               <>
-                <Text style={styles.label}>Username</Text>
+                <Text style={styles.label}>Name</Text>
                 <TextInput
                   style={styles.input}
-                  value={editUsername}
-                  onChangeText={setEditUsername}
+                  value={editDisplayName}
+                  onChangeText={setEditDisplayName}
+                  autoCorrect={false}
+                />
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editEmail}
+                  onChangeText={setEditEmail}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType="email-address"
                 />
                 <Text style={styles.label}>New password</Text>
                 <TextInput
@@ -122,13 +137,22 @@ export default function AdminScreen() {
         ))}
 
         <Text style={styles.sectionLabel}>New user</Text>
-        <Text style={styles.label}>Username</Text>
+        <Text style={styles.label}>Name</Text>
         <TextInput
           style={styles.input}
-          value={username}
-          onChangeText={setUsername}
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoCorrect={false}
+          placeholder="Display name (used for signing)"
+        />
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={styles.input}
+          value={email}
+          onChangeText={setEmail}
           autoCapitalize="none"
           autoCorrect={false}
+          keyboardType="email-address"
         />
         <Text style={styles.label}>Password</Text>
         <TextInput
