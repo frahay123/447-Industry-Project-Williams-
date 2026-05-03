@@ -160,10 +160,9 @@ export function useDeliveries() {
 
   const slipImageHeaders = useMemo(
     () => ({
-      'X-User-Name': session?.username ?? '',
-      'X-User-Role': session?.roleId ?? '',
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
     }),
-    [session?.username, session?.roleId],
+    [session?.token],
   );
 
   const getSlipImageSource = useCallback(
