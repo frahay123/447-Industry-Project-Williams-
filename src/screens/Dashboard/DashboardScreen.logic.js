@@ -43,8 +43,8 @@ export function useDashboard() {
   const [apiError, setApiError] = useState('');
 
   const load = useCallback(async () => {
-    if (!session?.username) return;
-    setUsername(session.username);
+    if (!session?.displayName) return;
+    setUsername(session.displayName);
     setRoleLabel(getRoleById(session.roleId)?.label ?? session.roleId);
 
     if (!projectReady || !apiSession) return;
