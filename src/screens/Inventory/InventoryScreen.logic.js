@@ -57,7 +57,7 @@ export function useInventory() {
     return opts;
   }, [settings, projects, selectedProjectId]);
 
-  const canAdd = canAddInventoryItem(session?.roleId) || session?.roleId === 'project_manager';
+  const canAdd = canAddInventoryItem(session?.roleId);
   const canAdjustQty = canAdjustInventoryQuantity(session?.roleId);
 
   const load = useCallback(async () => {
