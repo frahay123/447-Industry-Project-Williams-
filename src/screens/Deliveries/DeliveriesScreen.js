@@ -277,9 +277,9 @@ export default function DeliveriesScreen() {
         }}
         thread={discussionThread}
         user={{
-          name: session?.username || 'User',
+          name: session?.displayName || 'User',
           role: session?.roleId || 'Warehouse',
-          token: apiSession
+          token: session?.token,
         }}
       />
 
@@ -305,15 +305,21 @@ export default function DeliveriesScreen() {
                 <Text style={styles.detailBody} maxFontSizeMultiplier={MODAL_TEXT_MAX}>{shortageDetail.description}</Text>
                 <View style={styles.detailMetaRow}>
                   <Text style={styles.detailMetaItem} maxFontSizeMultiplier={MODAL_TEXT_MAX}>
-                    Ordered <Text style={styles.detailMetaStrong}>{shortageDetail.ordered}</Text>
+                    Ordered{' '}
+                    <Text style={styles.detailMetaStrong}>
+                      {shortageDetail.ordered}{shortageDetail.unit ? ` ${shortageDetail.unit}` : ''}
+                    </Text>
                   </Text>
                   <Text style={styles.detailMetaItem} maxFontSizeMultiplier={MODAL_TEXT_MAX}>
-                    Received <Text style={styles.detailMetaStrong}>{shortageDetail.received}</Text>
+                    Received{' '}
+                    <Text style={styles.detailMetaStrong}>
+                      {shortageDetail.received}{shortageDetail.unit ? ` ${shortageDetail.unit}` : ''}
+                    </Text>
                   </Text>
                   <Text style={styles.detailMetaItem} maxFontSizeMultiplier={MODAL_TEXT_MAX}>
                     Short{' '}
                     <Text style={[styles.detailMetaStrong, shortageDetail.short > 0 ? { color: '#dc2626' } : { color: '#16a34a' }]}>
-                      {shortageDetail.short}
+                      {shortageDetail.short}{shortageDetail.unit ? ` ${shortageDetail.unit}` : ''}
                     </Text>
                   </Text>
                 </View>
