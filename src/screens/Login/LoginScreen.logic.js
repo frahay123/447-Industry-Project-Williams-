@@ -3,21 +3,21 @@ import { useAuth } from '../../context/AuthContext';
 
 export function useLoginScreen() {
   const { login } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const onSubmit = useCallback(async () => {
     setError('');
-    const result = await login(username, password);
+    const result = await login(email, password);
     if (!result.ok) {
       setError(result.error ?? 'Sign-in failed.');
     }
-  }, [username, password, login]);
+  }, [email, password, login]);
 
   return {
-    username,
-    setUsername,
+    email,
+    setEmail,
     password,
     setPassword,
     error,
