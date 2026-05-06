@@ -39,6 +39,26 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0f172a',
   },
+  pickerBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pickerBtnText: {
+    fontSize: 16,
+    color: '#0f172a',
+    flex: 1,
+  },
+  pickerBtnPlaceholder: {
+    fontSize: 16,
+    color: '#94a3b8',
+    flex: 1,
+  },
+  pickerChevron: {
+    fontSize: 16,
+    color: '#94a3b8',
+    marginLeft: 8,
+  },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -153,6 +173,20 @@ export const styles = StyleSheet.create({
     color: '#475569',
     marginTop: 6,
     textTransform: 'capitalize',
+  },
+  statusStepLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#94a3b8',
+    flex: 1,
+    textAlign: 'center',
+  },
+  statusStepLabelActive: {
+    color: '#3b82f6',
+    fontWeight: '800',
+  },
+  statusStepLabelDone: {
+    color: '#22c55e',
   },
   signedInfo: {
     fontSize: 13,
