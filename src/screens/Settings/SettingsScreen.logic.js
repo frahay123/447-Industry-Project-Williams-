@@ -13,6 +13,7 @@ export function useSettings() {
   
   const [warehouse1Name, setWarehouse1Name] = useState('');
   const [warehouse2Name, setWarehouse2Name] = useState('');
+  const [sesFromEmail, setSesFromEmail] = useState('');
 
   /** Only Administrator (built-in or assigned) may edit warehouse names. */
   const isAdmin = session?.roleId === ROLE_IDS.ADMINISTRATOR;
@@ -26,6 +27,7 @@ export function useSettings() {
       if (data) {
         setWarehouse1Name(data.warehouse1_name || '');
         setWarehouse2Name(data.warehouse2_name || '');
+        setSesFromEmail(data.ses_from_email || '');
       }
     } catch (e) {
       setError(e.message || 'Failed to load settings.');
@@ -51,6 +53,7 @@ export function useSettings() {
           body: {
             warehouse1_name: warehouse1Name.trim(),
             warehouse2_name: warehouse2Name.trim(),
+            ses_from_email: sesFromEmail.trim(),
           },
         },
         apiSession
@@ -60,7 +63,7 @@ export function useSettings() {
     } catch (e) {
       setSaveError(e.message || 'Failed to save settings.');
     }
-  }, [warehouse1Name, warehouse2Name, apiSession]);
+  }, [warehouse1Name, warehouse2Name, sesFromEmail, apiSession]);
 
   return {
     isAdmin,
@@ -72,6 +75,8 @@ export function useSettings() {
     setWarehouse1Name,
     warehouse2Name,
     setWarehouse2Name,
+    sesFromEmail,
+    setSesFromEmail,
     saveSettings,
   };
 }
