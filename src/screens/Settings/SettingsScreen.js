@@ -22,6 +22,8 @@ export default function SettingsScreen() {
     setWarehouse1Name,
     warehouse2Name,
     setWarehouse2Name,
+    sesFromEmail,
+    setSesFromEmail,
     saveSettings,
   } = useSettings();
 
@@ -57,6 +59,23 @@ export default function SettingsScreen() {
           value={warehouse2Name}
           onChangeText={setWarehouse2Name}
           placeholder="e.g. Overflow Warehouse"
+        />
+
+        <Text style={styles.formTitle}>Transactional email (Amazon SES)</Text>
+        <Text style={styles.hint}>
+          This address appears as the sender for automated emails. It must be verified in
+          AWS SES (same region as the app). In SES sandbox, recipient addresses must be
+          verified too.
+        </Text>
+        <Text style={styles.label}>From email (SES)</Text>
+        <TextInput
+          style={styles.input}
+          value={sesFromEmail}
+          onChangeText={setSesFromEmail}
+          placeholder="frankhl1@umbc.edu"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
         />
 
         {saveError ? <Text style={styles.msg}>{saveError}</Text> : null}
