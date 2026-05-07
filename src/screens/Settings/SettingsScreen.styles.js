@@ -22,6 +22,12 @@ export const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 12,
   },
+  hint: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',

@@ -1,7 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# RDS Postgres — only created when create_rds = true
-# Set create_rds = false in terraform.tfvars to skip (saves ~$15/mo).
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 resource "random_password" "db" {
   count   = var.create_rds ? 1 : 0

@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from './TransfersScreen.styles';
@@ -12,6 +16,13 @@ import { EmptyState } from '../../components/EmptyState';
 import KeyboardSafeScroll from '../../components/KeyboardSafeScroll';
 
 const STATUS_ORDER = ['pending', 'manifested', 'in_transit', 'delivered'];
+
+const STATUS_DISPLAY = {
+  pending: 'Pending',
+  manifested: 'Manifested',
+  in_transit: 'In Transit',
+  delivered: 'Delivered',
+};
 
 const NEXT_STATUS = {
   pending: 'manifested',
@@ -34,7 +45,7 @@ function formatSiteLabel(raw) {
 function StatusTrack({ status }) {
   const idx = STATUS_ORDER.indexOf(status);
   return (
-    <>
+    <View style={{ marginTop: 12 }}>
       <View style={styles.statusTrack}>
         {STATUS_ORDER.map((step, i) => (
           <View
@@ -47,8 +58,21 @@ function StatusTrack({ status }) {
           />
         ))}
       </View>
-      <Text style={styles.statusLabel}>{status.replace('_', ' ')}</Text>
-    </>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+        {STATUS_ORDER.map((step, i) => (
+          <Text
+            key={step}
+            style={[
+              styles.statusStepLabel,
+              i === idx && styles.statusStepLabelActive,
+              i < idx && styles.statusStepLabelDone,
+            ]}
+          >
+            {STATUS_DISPLAY[step]}
+          </Text>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -88,6 +112,8 @@ export default function TransfersScreen() {
     setDescription,
     quantity,
     setQuantity,
+    unit,
+    setUnit,
     notes,
     setNotes,
     fromLocation,
@@ -95,11 +121,14 @@ export default function TransfersScreen() {
     toLocation,
     setToLocation,
     transferSites,
+    inventoryAtFrom,
     saveError,
     submitTransfer,
     advanceStatus,
     reload,
   } = useTransfers();
+
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -137,19 +166,37 @@ export default function TransfersScreen() {
             )}
 
             <Text style={styles.label}>Material</Text>
-            <TextInput
-              style={styles.input}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Item / material description"
-              editable={!needsProject}
-            />
+            <Pressable
+              style={[
+                styles.input,
+                styles.pickerBtn,
+                (!fromLocation || needsProject) && { opacity: 0.5 },
+              ]}
+              onPress={() => fromLocation && !needsProject && setPickerOpen(true)}
+              disabled={!fromLocation || needsProject}
+            >
+              <Text style={description ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                {description || (fromLocation ? 'Select item from inventory…' : 'Select a From location first')}
+              </Text>
+              <Text style={styles.pickerChevron}>▾</Text>
+            </Pressable>
+
             <Text style={styles.label}>Quantity</Text>
             <TextInput
               style={styles.input}
               value={quantity}
               onChangeText={setQuantity}
               keyboardType="number-pad"
+              editable={!needsProject && !!description}
+            />
+            <Text style={styles.label}>Unit (optional, e.g. ft, units, each)</Text>
+            <TextInput
+              style={styles.input}
+              value={unit}
+              onChangeText={setUnit}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="ft, units, each…"
               editable={!needsProject}
             />
             <Text style={styles.label}>Notes (optional)</Text>
@@ -161,9 +208,9 @@ export default function TransfersScreen() {
             />
             {saveError ? <Text style={styles.msg}>{saveError}</Text> : null}
             <Pressable
-              style={[styles.submit, needsProject && { opacity: 0.5 }]}
+              style={[styles.submit, (needsProject || !description) && { opacity: 0.5 }]}
               onPress={submitTransfer}
-              disabled={needsProject}
+              disabled={needsProject || !description}
             >
               <Text style={styles.submitText}>Submit transfer</Text>
             </Pressable>
@@ -197,7 +244,9 @@ export default function TransfersScreen() {
           return (
             <View key={t.id} style={styles.card}>
               <Text style={styles.rowTitle}>{t.description}</Text>
-              <Text style={styles.rowMeta}>Qty {t.quantity}</Text>
+              <Text style={styles.rowMeta}>
+                Qty {t.quantity}{t.unit ? ` ${t.unit}` : ''}
+              </Text>
               <View style={styles.directionRow}>
                 <Text style={styles.directionFrom}>
                   {fromDisp}
@@ -242,6 +291,66 @@ export default function TransfersScreen() {
           </Pressable>
         ) : null}
       </KeyboardSafeScroll>
+
+      {/* ── Inventory item picker ── */}
+      <Modal
+        visible={pickerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} edges={['top', 'bottom']}>
+          <View style={{ flex: 1, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: 80 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#0f172a' }}>
+                Items at {fromLocation}
+              </Text>
+              <Pressable onPress={() => setPickerOpen(false)}>
+                <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '600' }}>Cancel</Text>
+              </Pressable>
+            </View>
+
+            {inventoryAtFrom.length === 0 ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+                <Text style={{ fontSize: 15, color: '#6b7280', textAlign: 'center' }}>
+                  No items with stock at {fromLocation}.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={inventoryAtFrom}
+                keyExtractor={(item) => String(item.id)}
+                contentContainerStyle={{ padding: 12 }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={{
+                      padding: 14,
+                      backgroundColor: description === item.description ? '#eff6ff' : '#f8fafc',
+                      borderRadius: 12,
+                      marginBottom: 8,
+                      borderWidth: 1,
+                      borderColor: description === item.description ? '#bfdbfe' : '#e2e8f0',
+                    }}
+                    onPress={() => {
+                      setDescription(item.description);
+                      setQuantity(String(item.quantity));
+                      if (item.unit) setUnit(item.unit);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#0f172a' }}>
+                      {item.description}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                      Available: {item.quantity}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

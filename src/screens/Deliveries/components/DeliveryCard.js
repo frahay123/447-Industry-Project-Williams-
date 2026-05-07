@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { View, Text, Pressable, Image, Linking, StyleSheet, LayoutAnimation } from 'react-native';
+import { useState } from 'react';
+import { View, Text, Pressable, Image, Linking, StyleSheet } from 'react-native';
+
 import ActivityLogPanel from './ActivityLogPanel';
 
 const ISSUE_TYPES = { WRONG_ITEM: 'Wrong Item', DAMAGED: 'Damaged', MISSING: 'Missing', OVER_DELIVERY: 'Over-delivery' };
@@ -7,32 +8,30 @@ const ISSUE_TYPES = { WRONG_ITEM: 'Wrong Item', DAMAGED: 'Damaged', MISSING: 'Mi
 export default function DeliveryCard({
   slip,
   existingItems = [],
+  onLinkPO,
   onLogItems,
+  onReject,
+  onDelete,
   onPreview,
   onComplete,
-  onFlagIssue,
-  onOpenDiscussion,
-  onDelete,
-  canDelete = false,
-  canAddItems = false,
-  isPM = false,
+  onOpenMessages,
+  canDelete,
+  canAddItems,
   getSlipImageSource,
   slipActivities = [],
-  loadSlipActivities,
 }) {
-  const [showActivities, setShowActivities] = useState(false);
-  const itemCount = existingItems.length || (slip.item_count || 0);
-  const issueCount = existingItems.length > 0 
-    ? existingItems.filter(it => it.issue_type).length 
-    : (slip.issue_count || 0);
+  const itemCount = existingItems.length;
+  const issueCount = existingItems.filter(it => it.issue_type).length;
   const linkedPos = slip.linked_pos || [];
+  const [showActivities, setShowActivities] = useState(false);
+  const vendorNames = linkedPos.map(p => p.vendor).filter(Boolean).join(', ');
 
   return (
     <View style={s.card}>
       {/* Header */}
       <View style={s.header}>
         <View style={{ flex: 1 }}>
-          <Text style={s.slipNumber}>Slip #{slip.slip_seq}</Text>
+          <Text style={s.slipNumber}>{vendorNames ? vendorNames : `Slip #${slip.slip_seq}`}</Text>
           <Text style={s.meta}>
             {slip.uploaded_by} · {new Date(slip.created_at).toLocaleDateString()}
           </Text>
@@ -52,7 +51,7 @@ export default function DeliveryCard({
           style={s.pdfBtn}
           onPress={() => Linking.openURL(getSlipImageSource(slip.id).uri)}
         >
-          <Text style={s.pdfBtnText}>View PDF Document</Text>
+          <Text style={s.pdfBtnText}>📄 View PDF Document</Text>
         </Pressable>
       ) : (
         <Pressable onPress={() => onPreview(slip.id)} style={s.thumbWrap}>
@@ -73,7 +72,7 @@ export default function DeliveryCard({
             {linkedPos.map((po) => (
               <View key={po.id} style={s.poPill}>
                 <Text style={s.poPillText}>
-                  PO #{po.po_number}
+                  PO #{po.po_seq} ({po.po_number})
                   {po.vendor ? ` — ${po.vendor}` : ''}
                 </Text>
               </View>
@@ -89,7 +88,7 @@ export default function DeliveryCard({
         </Text>
         {issueCount > 0 ? (
           <View style={s.issueBadge}>
-            <Text style={s.issueBadgeText}>{issueCount} issue{issueCount !== 1 ? 's' : ''}</Text>
+            <Text style={s.issueBadgeText}>⚠ {issueCount} issue{issueCount !== 1 ? 's' : ''}</Text>
           </View>
         ) : null}
       </View>
@@ -97,64 +96,56 @@ export default function DeliveryCard({
       {/* Shipment info */}
       {slip.expected_shipments > 1 ? (
         <Text style={s.shipmentInfo}>
-          Shipment {slip.shipment_number} of {slip.expected_shipments}
+          📦 Shipment {slip.shipment_number} of {slip.expected_shipments}
         </Text>
       ) : null}
-      
-      {slip.signed_by && slip.completed_at && (
-        <Text style={s.shipmentInfo}>Completed on {new Date(slip.completed_at).toLocaleDateString()}</Text>
-      )}
+
+      {/* Activity Log for this slip */}
+      {slipActivities.length > 0 ? (
+        <View style={{ marginTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+          <Pressable 
+            style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12 }}
+            onPress={() => setShowActivities(!showActivities)}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Slip Activity ({slipActivities.length})</Text>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>{showActivities ? '▲ Hide' : '▼ Expand'}</Text>
+          </Pressable>
+          {showActivities && (
+            <View style={{ marginTop: 12 }}>
+              <ActivityLogPanel activities={slipActivities} isGlobal={false} />
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {/* Footer actions */}
       <View style={s.footer}>
+        {!slip.signed_by && !slip.is_rejected ? (
+          <Pressable style={[s.actionBtn, { backgroundColor: '#16a34a' }]} onPress={() => onComplete && onComplete(slip.id)}>
+            <Text style={[s.actionBtnText, { color: '#fff' }]}>Mark Complete</Text>
+          </Pressable>
+        ) : null}
+        {linkedPos.length === 0 ? (
+          <Pressable style={s.actionBtn} onPress={() => onLinkPO && onLinkPO(slip.id)}>
+            <Text style={s.actionBtnText}>📎 Link PO</Text>
+          </Pressable>
+        ) : null}
         {canAddItems ? (
           <Pressable style={[s.actionBtn, s.actionPrimary]} onPress={() => onLogItems(slip.id)}>
             <Text style={[s.actionBtnText, s.actionPrimaryText]}>
-              {slip.signed_by ? 'View Items' : (itemCount > 0 ? 'Edit Items' : 'Log Items')}
+              {itemCount > 0 ? 'Edit Items' : 'Log Items'}
             </Text>
           </Pressable>
         ) : null}
-        {itemCount > 0 && !slip.signed_by && !isPM ? (
-          <Pressable style={[s.actionBtn, s.actionComplete]} onPress={() => onComplete(slip.id)}>
-            <Text style={[s.actionBtnText, s.actionCompleteText]}>Mark Complete</Text>
-          </Pressable>
-        ) : null}
-
-        {slip.thread_id ? (
-          <Pressable style={[s.actionBtn, s.actionDiscussion]} onPress={onOpenDiscussion}>
-            <Text style={s.actionDiscussionText}>Messages</Text>
-            {slip.thread_status === 'open' && <View style={s.activeDot} />}
-          </Pressable>
-        ) : (!slip.signed_by ? (
-          <Pressable style={[s.actionBtn, s.actionReject]} onPress={() => onFlagIssue(slip.id)}>
-            <Text style={[s.actionBtnText, s.actionRejectText]}>Flag Issue</Text>
-          </Pressable>
-        ) : null)}
-        <Pressable 
-          style={[s.actionBtn, s.actionSecondary]} 
-          onPress={() => {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            if (!showActivities) loadSlipActivities(slip.id);
-            setShowActivities(!showActivities);
-          }}
-        >
-          <Text style={[s.actionBtnText, s.actionSecondaryText]}>
-            {showActivities ? 'Hide Activity' : 'Recent Activity'}
-          </Text>
+        <Pressable style={[s.actionBtn, { backgroundColor: '#3b82f6' }]} onPress={() => onOpenMessages && onOpenMessages(slip)}>
+          <Text style={[s.actionBtnText, { color: '#fff' }]}>Messages</Text>
         </Pressable>
-      </View>
-
-      {showActivities && (
-        <View style={s.activitySection}>
-          <ActivityLogPanel activities={slipActivities} isGlobal={false} />
-        </View>
-      )}
-
-      {canDelete && !slip.signed_by ? (
+        {canDelete && !slip.signed_by ? (
           <Pressable style={[s.actionBtn, s.actionDanger]} onPress={() => onDelete(slip.id)}>
-            <Text style={[s.actionBtnText, s.actionDangerText]}>Delete</Text>
+            <Text style={[s.actionBtnText, s.actionDangerText]}>🗑 Delete</Text>
           </Pressable>
         ) : null}
+      </View>
     </View>
   );
 }
@@ -250,41 +241,5 @@ const s = StyleSheet.create({
   actionPrimaryText: { color: '#fff' },
   actionDanger: { backgroundColor: '#fef2f2' },
   actionDangerText: { color: '#991b1b' },
-  actionComplete: { backgroundColor: '#f0fdf4', borderColor: '#dcfce7', borderWidth: 1 },
-  actionCompleteText: { color: '#16a34a' },
-  actionReject: { backgroundColor: '#fef2f2' },
-  actionRejectText: {
-    color: '#dc2626',
-  },
-  actionSecondaryText: {
-    color: '#475569',
-  },
-  actionSecondary: {
-    backgroundColor: '#f1f5f9',
-  },
-  actionDiscussion: {
-    backgroundColor: '#ebf8ff',
-    borderColor: '#bee3f8',
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionDiscussionText: {
-    color: '#3182ce',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#e53e3e',
-    marginLeft: 6,
-  },
-  activitySection: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 12,
-  },
 });
+
