@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 <<<<<<< HEAD
@@ -16,53 +16,85 @@ export function useAdminScreen() {
     const result = await createUser(username, password, roleId);
 =======
 import { ASSIGNABLE_ROLES, ROLE_IDS, FOREMAN_TYPES } from '../../constants/roles';
+import { apiFetch } from '../../api/client';
 
 export function useAdminScreen() {
-  const {
-    canManageUsers,
-    users,
-    createUser,
-    deleteUser,
-    updateUserCredentials,
-    logout,
-  } = useAuth();
-  const [username, setUsername] = useState('');
+  const { canManageUsers, apiSession, logout } = useAuth();
+
+  const [users, setUsers] = useState([]);
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [roleId, setRoleId] = useState(ROLE_IDS.WAREHOUSE_STAFF);
   const [foremanType, setForemanType] = useState(FOREMAN_TYPES[0].id);
   const [feedback, setFeedback] = useState({ type: '', text: '' });
+
   const [editingUserId, setEditingUserId] = useState(null);
-  const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editDisplayName, setEditDisplayName] = useState('');
   const [editPassword, setEditPassword] = useState('');
 
   const isForeman = roleId === ROLE_IDS.FOREMAN;
 
+  const loadUsers = useCallback(async () => {
+    if (!canManageUsers || !apiSession) return;
+    try {
+      const rows = await apiFetch('/api/auth/users', {}, apiSession);
+      setUsers(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setFeedback({ type: 'err', text: e.message ?? 'Could not load users.' });
+    }
+  }, [canManageUsers, apiSession]);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
   const onAddUser = useCallback(async () => {
     setFeedback({ type: '', text: '' });
+<<<<<<< HEAD
     const opts = isForeman ? { foremanType } : {};
     const result = await createUser(username, password, roleId, opts);
 >>>>>>> main
     if (result.ok) {
       setUsername('');
+=======
+    try {
+      await apiFetch('/api/auth/users', {
+        method: 'POST',
+        body: {
+          email,
+          displayName,
+          password,
+          roleId,
+          foremanType: isForeman ? foremanType : undefined,
+        },
+      }, apiSession);
+      setEmail('');
+      setDisplayName('');
+>>>>>>> 19f3ebacc62c31c4e4e69dd7adbaca7607109b3d
       setPassword('');
+      await loadUsers();
       Alert.alert('Saved', 'Sign out to sign in as the new user?', [
         { text: 'Stay', style: 'cancel' },
         { text: 'Sign out', style: 'default', onPress: () => logout() },
       ]);
-    } else {
-      setFeedback({ type: 'err', text: result.error ?? 'Could not create user.' });
+    } catch (e) {
+      setFeedback({ type: 'err', text: e.message ?? 'Could not create user.' });
     }
+<<<<<<< HEAD
 <<<<<<< HEAD
   }, [username, password, roleId, createUser, logout]);
 =======
   }, [username, password, roleId, foremanType, isForeman, createUser, logout]);
 >>>>>>> main
+=======
+  }, [email, displayName, password, roleId, foremanType, isForeman, apiSession, loadUsers, logout]);
+>>>>>>> 19f3ebacc62c31c4e4e69dd7adbaca7607109b3d
 
   const confirmRemoveUser = useCallback(
     (u) => {
       Alert.alert(
         'Remove account',
-        `Remove "${u.username}"?`,
+        `Remove "${u.display_name}" (${u.email})?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -70,21 +102,19 @@ export function useAdminScreen() {
             style: 'destructive',
             onPress: async () => {
               setFeedback({ type: '', text: '' });
-              const r = await deleteUser(u.id);
-              if (r.ok) {
+              try {
+                await apiFetch(`/api/auth/users/${u.id}`, { method: 'DELETE' }, apiSession);
                 setFeedback({ type: 'ok', text: 'Removed.' });
-              } else {
-                setFeedback({
-                  type: 'err',
-                  text: r.error ?? 'Could not remove user.',
-                });
+                await loadUsers();
+              } catch (e) {
+                setFeedback({ type: 'err', text: e.message ?? 'Could not remove user.' });
               }
             },
           },
         ],
       );
     },
-    [deleteUser],
+    [apiSession, loadUsers],
   );
 
 <<<<<<< HEAD
@@ -92,36 +122,37 @@ export function useAdminScreen() {
   const beginEditUser = useCallback((u) => {
     setFeedback({ type: '', text: '' });
     setEditingUserId(u.id);
-    setEditUsername(u.username);
+    setEditEmail(u.email);
+    setEditDisplayName(u.display_name);
     setEditPassword('');
   }, []);
 
   const cancelEditUser = useCallback(() => {
     setEditingUserId(null);
-    setEditUsername('');
+    setEditEmail('');
+    setEditDisplayName('');
     setEditPassword('');
   }, []);
 
   const saveEditUser = useCallback(async () => {
     if (!editingUserId) return;
     setFeedback({ type: '', text: '' });
-    const result = await updateUserCredentials(editingUserId, {
-      username: editUsername,
-      password: editPassword,
-    });
-    if (result.ok) {
+    try {
+      await apiFetch(`/api/auth/users/${editingUserId}`, {
+        method: 'PATCH',
+        body: {
+          email: editEmail,
+          displayName: editDisplayName,
+          password: editPassword || undefined,
+        },
+      }, apiSession);
       setFeedback({ type: 'ok', text: 'User updated.' });
       cancelEditUser();
-    } else {
-      setFeedback({ type: 'err', text: result.error ?? 'Could not update user.' });
+      await loadUsers();
+    } catch (e) {
+      setFeedback({ type: 'err', text: e.message ?? 'Could not update user.' });
     }
-  }, [
-    editingUserId,
-    editUsername,
-    editPassword,
-    updateUserCredentials,
-    cancelEditUser,
-  ]);
+  }, [editingUserId, editEmail, editDisplayName, editPassword, apiSession, cancelEditUser, loadUsers]);
 
 >>>>>>> main
   return {
@@ -129,8 +160,10 @@ export function useAdminScreen() {
     users,
     logout,
     assignableRoles: ASSIGNABLE_ROLES,
-    username,
-    setUsername,
+    email,
+    setEmail,
+    displayName,
+    setDisplayName,
     password,
     setPassword,
     roleId,
@@ -148,8 +181,10 @@ export function useAdminScreen() {
     onAddUser,
     confirmRemoveUser,
     editingUserId,
-    editUsername,
-    setEditUsername,
+    editEmail,
+    setEditEmail,
+    editDisplayName,
+    setEditDisplayName,
     editPassword,
     setEditPassword,
     beginEditUser,

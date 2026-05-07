@@ -14,8 +14,8 @@ export default function LoginScreen() {
   const scrollRef = useRef(null);
   const passwordRef = useRef(null);
   const {
-    username,
-    setUsername,
+    email,
+    setEmail,
     password,
     setPassword,
     error,
@@ -42,15 +42,16 @@ export default function LoginScreen() {
         >
           <Text style={styles.title}>MEC2 Tracker</Text>
 
-          <Text style={styles.label}>Username</Text>
+          <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            value={username}
-            onChangeText={setUsername}
+            value={email}
+            onChangeText={setEmail}
             autoCapitalize="none"
             autoCorrect={false}
-            autoComplete="username"
-            textContentType="username"
+            autoComplete="email"
+            textContentType="emailAddress"
+            keyboardType="email-address"
             editable
             returnKeyType="next"
             blurOnSubmit={false}
