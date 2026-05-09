@@ -1,0 +1,12 @@
+
+
+aws_region          = "us-east-1"
+allowed_ssh_cidr    = "0.0.0.0/0"          
+ssh_public_key_file = "~/.ssh/id_ed25519.pub"
+create_rds          = true                  
+enable_ec2          = false
+# bedrock_model_id  = "amazon.nova-pro-v1:0"
+# db_password       = "your-secure-pw"
+# SES (optional): attach IAM policy is always applied; set true to create a verified email identity in SES
+# ses_enable_email_identity   = true
+# ses_transactional_from_email = "frankhl1@umbc.edu"
