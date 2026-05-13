@@ -19,7 +19,7 @@ export function usePurchaseOrders() {
   const [poNumber, setPoNumber] = useState('');
   const [vendor, setVendor] = useState('');
   const [totalPrice, setTotalPrice] = useState('');
-  const [items, setItems] = useState([{ description: '', quantity: '1', unit: 'each', price: '' }]);
+  const [items, setItems] = useState([{ description: '', quantity: '1', unit: 'each', price: '', notify_foreman_type: null }]);
   const [poImageUri, setPoImageUri] = useState(null);
   const [poImageMime, setPoImageMime] = useState(null);
   const [saveError, setSaveError] = useState('');
@@ -45,10 +45,9 @@ export function usePurchaseOrders() {
 
   const poImageHeaders = useMemo(
     () => ({
-      'X-User-Name': session?.username ?? '',
-      'X-User-Role': session?.roleId ?? '',
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
     }),
-    [session?.username, session?.roleId],
+    [session?.token],
   );
 
   const getPoImageSource = useCallback(
@@ -88,7 +87,7 @@ export function usePurchaseOrders() {
   useEffect(() => { load(); }, [selectedProjectId, load]);
 
   const addItem = useCallback(() => {
-    setItems((prev) => [...prev, { description: '', quantity: '1', unit: 'each', price: '' }]);
+    setItems((prev) => [...prev, { description: '', quantity: '1', unit: 'each', price: '', notify_foreman_type: null }]);
   }, []);
 
   const updateItem = useCallback((index, field, value) => {
@@ -174,6 +173,7 @@ export function usePurchaseOrders() {
             quantity: String(it.quantity || 1),
             unit: it.unit || 'each',
             price: it.unit_price != null ? String(it.unit_price) : '',
+            notify_foreman_type: null,
           })),
         );
       }
@@ -215,6 +215,7 @@ export function usePurchaseOrders() {
               quantity: parseInt(it.quantity, 10) || 1,
               unit: it.unit.trim() || 'each',
               unit_price: it.price ? parseFloat(it.price) || null : null,
+              notify_foreman_type: it.notify_foreman_type || null,
             })),
           },
         },
@@ -239,7 +240,7 @@ export function usePurchaseOrders() {
       setPoNumber('');
       setVendor('');
       setTotalPrice('');
-      setItems([{ description: '', quantity: '1', unit: 'each', price: '' }]);
+      setItems([{ description: '', quantity: '1', unit: 'each', price: '', notify_foreman_type: null }]);
       setPoImageUri(null);
       setPoImageMime(null);
       setExtractionNotes('');
@@ -271,6 +272,28 @@ export function usePurchaseOrders() {
       setExpandedLinkedSlips([]);
     }
   }, [expandedId, apiSession]);
+
+  const updateLineItemForemanType = useCallback(async (lineItemId, newType) => {
+    // Optimistic update
+    setExpandedItems((prev) =>
+      prev.map((it) => (it.id === lineItemId ? { ...it, notify_foreman_type: newType } : it))
+    );
+    try {
+      await apiFetch(
+        `/api/po-line-items/${lineItemId}/foreman-type`,
+        { method: 'PATCH', body: { notify_foreman_type: newType } },
+        apiSession,
+      );
+    } catch (e) {
+      // Roll back on error
+      setExpandedItems((prev) =>
+        prev.map((it) =>
+          it.id === lineItemId ? { ...it, notify_foreman_type: it.notify_foreman_type } : it
+        )
+      );
+      Alert.alert('Error', e.message || 'Could not update foreman type.');
+    }
+  }, [apiSession]);
 
   const confirmDeletePoImage = useCallback((id) => {
     Alert.alert('Delete image', 'Remove the attached PO document photo?', [
@@ -491,6 +514,7 @@ export function usePurchaseOrders() {
     extractionNotes,
     pickAndExtractPDF,
     cancelPo,
+    updateLineItemForemanType,
     setBackorderDate,
     requestAmendQty,
     requestMarkFinal,

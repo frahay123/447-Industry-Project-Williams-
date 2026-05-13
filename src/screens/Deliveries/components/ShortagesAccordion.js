@@ -50,9 +50,13 @@ export default function ShortagesAccordion({
                 </Pressable>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={s.nums}>{s_item.received}/{s_item.ordered}</Text>
+                <Text style={s.nums}>
+                  {s_item.received}/{s_item.ordered}{s_item.unit ? ` ${s_item.unit}` : ''}
+                </Text>
                 {s_item.short > 0 ? (
-                  <Text style={s.alert}>{s_item.short} short</Text>
+                  <Text style={s.alert}>
+                    {s_item.short}{s_item.unit ? ` ${s_item.unit}` : ''} short
+                  </Text>
                 ) : (
                   <Text style={s.ok}>OK</Text>
                 )}

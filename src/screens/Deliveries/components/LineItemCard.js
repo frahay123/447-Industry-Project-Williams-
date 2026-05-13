@@ -46,7 +46,9 @@ export default function LineItemCard({
           />
         </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={s.fieldLabel}>Qty</Text>
+          <Text style={s.fieldLabel}>
+            Qty{linkedPoItem?.unit ? ` (${linkedPoItem.unit})` : ''}
+          </Text>
           <TextInput
             style={[s.input, readOnly && s.inputReadOnly]}
             value={item.quantity_received}
@@ -97,7 +99,7 @@ export default function LineItemCard({
               {poItems.map((p) => (
                 <Picker.Item
                   key={p.id}
-                  label={`[PO #${p.po_seq || p.po_number}] ${p.description} (Ord: ${p.quantity})`}
+                  label={`[PO #${p.po_seq || p.po_number}] ${p.description} (Ord: ${p.quantity}${p.unit ? ' ' + p.unit : ''})`}
                   value={p.id}
                 />
               ))}

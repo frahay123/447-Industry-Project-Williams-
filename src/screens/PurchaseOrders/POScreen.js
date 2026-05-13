@@ -17,6 +17,12 @@ import { usePurchaseOrders } from './POScreen.logic';
 import { EmptyState } from '../../components/EmptyState';
 import KeyboardSafeScroll from '../../components/KeyboardSafeScroll';
 
+const FOREMAN_TYPES = [
+  { label: 'Plumbing', value: 'plumbing' },
+  { label: 'Sheet Metal', value: 'sheet_metal' },
+  { label: 'Refrigerant', value: 'refrigerant' },
+];
+
 const imgStyles = StyleSheet.create({
   modalRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)' },
   modalBar: {
@@ -112,6 +118,7 @@ export default function POScreen() {
     extractionNotes,
     pickAndExtractPDF,
     cancelPo,
+    updateLineItemForemanType,
     setBackorderDate,
     requestAmendQty,
     requestMarkFinal,
@@ -223,49 +230,71 @@ export default function POScreen() {
 
             <Text style={styles.label}>Line items</Text>
             {items.map((item, i) => (
-              <View key={i} style={styles.lineItemRow}>
-                <View style={styles.lineItemDesc}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.description}
-                    onChangeText={(v) => updateItem(i, 'description', v)}
-                    placeholder="Material"
-                  />
+              <View key={i} style={liS.itemBlock}>
+                <View style={styles.lineItemRow}>
+                  <View style={styles.lineItemDesc}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.description}
+                      onChangeText={(v) => updateItem(i, 'description', v)}
+                      placeholder="Material"
+                    />
+                  </View>
+                  <View style={styles.lineItemQty}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.quantity}
+                      onChangeText={(v) => updateItem(i, 'quantity', v)}
+                      keyboardType="number-pad"
+                      placeholder="Qty"
+                    />
+                  </View>
+                  <View style={styles.lineItemUnit}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.unit}
+                      onChangeText={(v) => updateItem(i, 'unit', v)}
+                      placeholder="Unit"
+                    />
+                  </View>
+                  <View style={styles.lineItemPrice}>
+                    <TextInput
+                      style={styles.inputSmall}
+                      value={item.price}
+                      onChangeText={(v) => updateItem(i, 'price', v)}
+                      keyboardType="decimal-pad"
+                      placeholder="$"
+                    />
+                  </View>
+                  {items.length > 1 ? (
+                    <Pressable
+                      style={styles.removeItemBtn}
+                      onPress={() => removeItem(i)}
+                    >
+                      <Text style={styles.removeItemText}>X</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-                <View style={styles.lineItemQty}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.quantity}
-                    onChangeText={(v) => updateItem(i, 'quantity', v)}
-                    keyboardType="number-pad"
-                    placeholder="Qty"
-                  />
+                {/* Foreman-type notification chips */}
+                <View style={liS.chipRow}>
+                  <Text style={liS.chipLabel}>Notify foreman:</Text>
+                  {FOREMAN_TYPES.map((ft) => {
+                    const active = item.notify_foreman_type === ft.value;
+                    return (
+                      <Pressable
+                        key={ft.value}
+                        style={[liS.chip, active && liS.chipActive]}
+                        onPress={() =>
+                          updateItem(i, 'notify_foreman_type', active ? null : ft.value)
+                        }
+                      >
+                        <Text style={[liS.chipText, active && liS.chipTextActive]}>
+                          {ft.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-                <View style={styles.lineItemUnit}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.unit}
-                    onChangeText={(v) => updateItem(i, 'unit', v)}
-                    placeholder="Unit"
-                  />
-                </View>
-                <View style={styles.lineItemPrice}>
-                  <TextInput
-                    style={styles.inputSmall}
-                    value={item.price}
-                    onChangeText={(v) => updateItem(i, 'price', v)}
-                    keyboardType="decimal-pad"
-                    placeholder="$"
-                  />
-                </View>
-                {items.length > 1 ? (
-                  <Pressable
-                    style={styles.removeItemBtn}
-                    onPress={() => removeItem(i)}
-                  >
-                    <Text style={styles.removeItemText}>X</Text>
-                  </Pressable>
-                ) : null}
               </View>
             ))}
 
@@ -413,6 +442,32 @@ export default function POScreen() {
                           {delivered}/{ordered} delivered
                         </Text>
                       </View>
+                      {/* Foreman-type chips — PM can tap to set/change/clear */}
+                      {isPM ? (
+                        <View style={liS.editChipRow}>
+                          <Text style={liS.chipLabel}>Notify foreman:</Text>
+                          {FOREMAN_TYPES.map((ft) => {
+                            const active = it.notify_foreman_type === ft.value;
+                            return (
+                              <Pressable
+                                key={ft.value}
+                                style={[liS.chip, active && liS.chipActive]}
+                                onPress={() =>
+                                  updateLineItemForemanType(it.id, active ? null : ft.value)
+                                }
+                              >
+                                <Text style={[liS.chipText, active && liS.chipTextActive]}>
+                                  {ft.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : it.notify_foreman_type ? (
+                        <Text style={poS.foremanLabel}>
+                          🔔 {FOREMAN_TYPES.find((f) => f.value === it.notify_foreman_type)?.label ?? it.notify_foreman_type} foreman notified on delivery
+                        </Text>
+                      ) : null}
                       {it.is_final ? (
                         <Text style={poS.finalLabel}>✓ Final — no more expected</Text>
                       ) : null}
@@ -635,5 +690,58 @@ const poS = StyleSheet.create({
     color: '#9a3412',
     fontWeight: '600',
     marginTop: 4,
+  },
+  foremanLabel: {
+    fontSize: 12,
+    color: '#7c3aed',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+});
+
+const liS = StyleSheet.create({
+  itemBlock: {
+    marginBottom: 4,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  editChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  chipLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+    marginRight: 2,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  chipActive: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed',
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  chipTextActive: {
+    color: '#fff',
   },
 });
